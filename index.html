@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#2196f3">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="https://piecesnbits.github.io/zoekmap/manifest.json">
   <title>Historic Map Viewer — Favorites + Editable Shapes</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -513,7 +513,7 @@ const geocoder = L.Control.geocoder({
     }, err => console.warn(err), { enableHighAccuracy: true, maximumAge: 1000 });
   }
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('https://piecesnbits.github.io/zoekmap/sw.js')
       .then(() => console.log('Service Worker registered'))
       .catch(err => console.error('Service Worker registration failed:', err));
   }
