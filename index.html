@@ -122,7 +122,7 @@
         draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
         edit: false
       });
-      this.map.addControl(this.drawControl);
+      // this.map.addControl(this.drawControl);
 
       this.editControl = null;
       this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
@@ -262,6 +262,7 @@
       else this.drawingManager.clear();
       this.editIndex = null;
       this.drawingManager.disableEditMode();
+      this.drawingManager.clear();
     }
 
     _renderList() {
