@@ -77,8 +77,11 @@
     <div class="section">
       <h3>⭐ Favorites</h3>
       <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button id="saveFavBtn" class="btn-save" style="flex:1">Save Current View</button>
-        <button id="exportBtn" class="btn-small" title="Export favorites">Export</button>
+        <button id="newViewBtn" class="btn-save" style="flex:1">Create New View</button>
+        <div id="saveCancelWrapper" style="display:none;flex:1;gap:6px">
+          <button id="saveNewViewBtn" class="btn-save" style="flex:1">Save</button>
+          <button id="cancelNewViewBtn" class="btn-small" style="flex:1">Cancel</button>
+        </div>
       </div>
 
       <div id="editBanner" style="display:none" class="edit-banner">
@@ -114,7 +117,6 @@
       this.drawnItems = new L.FeatureGroup();
       this.map.addLayer(this.drawnItems);
 
-      // Default draw control: drawing allowed, edit disabled.
       this.drawControl = new L.Control.Draw({
         position: 'topright',
         draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
@@ -122,10 +124,7 @@
       });
       this.map.addControl(this.drawControl);
 
-      // Edit-enabled control will be created on demand.
       this.editControl = null;
-
-      // Events
       this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
     }
 
@@ -150,21 +149,14 @@
     }
 
     enableEditMode() {
-      // If already in edit mode, no-op
       if (this.editControl) return;
-
-      // Remove the default drawControl and replace with one that has edit enabled
       if (this.drawControl) this.map.removeControl(this.drawControl);
-
       this.editControl = new L.Control.Draw({
         position: 'topright',
         draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
         edit: { featureGroup: this.drawnItems, remove: true }
       });
       this.map.addControl(this.editControl);
-
-      // Bind edit events if needed (optional hooks)
-      // We rely on the draw.edit toolbar for editing/removing features.
     }
 
     disableEditMode() {
@@ -172,7 +164,6 @@
         this.map.removeControl(this.editControl);
         this.editControl = null;
       }
-      // restore default drawControl (draw-only, edit disabled)
       if (!this.drawControl) {
         this.drawControl = new L.Control.Draw({
           position: 'topright',
@@ -192,22 +183,15 @@
       this.listElement = listElement;
       this.storageKey = 'favorites';
       this.data = [];
-      this.markers = [];
-      this.activeIndex = null; // currently loaded favorite index (view)
-      this.editIndex = null;   // currently editing favorite index
+      this.activeIndex = null;
+      this.editIndex = null;
       this.load();
     }
 
     load() {
-      try {
-        const stored = JSON.parse(localStorage.getItem(this.storageKey) || '[]');
-        this.data = stored;
-      } catch (err) {
-        console.error('Failed to parse favorites', err);
-        this.data = [];
-      }
+      try { this.data = JSON.parse(localStorage.getItem(this.storageKey) || '[]'); } 
+      catch { this.data = []; }
       this._renderList();
-
     }
 
     saveStorage() {
@@ -218,93 +202,64 @@
       const center = this.map.getCenter();
       const zoom = this.map.getZoom();
       const shapes = this.drawingManager.toGeoJSON();
-      const fav = { name, center, zoom, shapes };
-      this.data.push(fav);
+      this.data.push({ name, center, zoom, shapes });
       this.saveStorage();
       this._renderList();
-
       this.drawingManager.clear();
     }
 
     deleteFavorite(index) {
-      // if deleting the favorite being edited, cancel edit
-      if (this.editIndex === index) {
-        this.cancelEdit();
-      }
+      if (this.editIndex === index) this.cancelEdit();
       this.data.splice(index, 1);
       this.saveStorage();
       this._renderList();
-      this.drawingManager.clear();
-
-      // fix active/edit indices if needed
       if (this.activeIndex === index) this.activeIndex = null;
       if (this.editIndex === index) this.editIndex = null;
     }
 
-    // Load favorite into view (no edit)
     openFavorite(index, options = { confirmDiscard: true }) {
-      // If currently editing a favourite and it's not the same, ask confirm
       if (this.editIndex !== null && this.editIndex !== index && options.confirmDiscard) {
-        const discard = confirm('You have unsaved edits. Discard changes?');
-        if (!discard) return false;
-        this.cancelEdit(); // discard changes
+        if (!confirm('You have unsaved edits. Discard changes?')) return false;
+        this.cancelEdit();
       }
-
       const fav = this.data[index];
       if (!fav) return false;
       this.map.setView(fav.center, fav.zoom);
       this.activeIndex = index;
-
-      // Clear drawn shapes (we are not entering edit mode, but show shapes as non-editable)
       this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
-      // When not editing we want draw controls active for creating new temp shapes,
-      // but ensure edit mode is disabled:
       this.drawingManager.disableEditMode();
       return true;
     }
 
-    // Enter edit mode for a given favorite
     enterEditMode(index) {
       const fav = this.data[index];
       if (!fav) return false;
       this.map.setView(fav.center, fav.zoom);
-      // If already editing a different index, ask confirm
       if (this.editIndex !== null && this.editIndex !== index) {
-        const discard = confirm('You have unsaved edits. Discard changes?');
-        if (!discard) return false;
+        if (!confirm('You have unsaved edits. Discard changes?')) return false;
         this.cancelEdit();
       }
-
       this.editIndex = index;
-      // Load shapes into drawn layer so user can edit them.
       this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
       this.drawingManager.enableEditMode();
       return true;
     }
 
-    // Save edited shapes back to the currently edited favourite (only shapes)
     saveEditedShapes() {
       if (this.editIndex === null) return false;
       const shapes = this.drawingManager.toGeoJSON();
-      // overwrite shapes only; keep center/zoom as-is
       this.data[this.editIndex].shapes = shapes;
       this.saveStorage();
       this._renderList();
-      // exit edit mode
       this.cancelEdit();
       return true;
     }
 
-    // Cancel current edit (discard changes)
     cancelEdit() {
       if (this.editIndex === null) return;
-      // Reload shapes from storage for the favourite or clear
       const fav = this.data[this.editIndex];
-      if (fav && fav.shapes) {
-        this.drawingManager.loadGeoJSON(fav.shapes);
-      } else {
-        this.drawingManager.clear();
-      }
+      if (fav && fav.shapes) this.drawingManager.loadGeoJSON(fav.shapes);
+      else this.drawingManager.clear();
       this.editIndex = null;
       this.drawingManager.disableEditMode();
     }
@@ -322,7 +277,6 @@
         nameSpan.textContent = fav.name;
         nameSpan.title = 'Open favorite (view only)';
         nameSpan.addEventListener('click', () => this.openFavorite(i, { confirmDiscard: true }));
-
         left.appendChild(nameSpan);
 
         const right = document.createElement('div');
@@ -344,26 +298,21 @@
         deleteBtn.title = 'Delete favorite';
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (confirm(`Delete favorite "${fav.name}"?`)) {
-            this.deleteFavorite(i);
-          }
+          if (confirm(`Delete favorite "${fav.name}"?`)) this.deleteFavorite(i);
         });
 
         right.appendChild(editBtn);
         right.appendChild(deleteBtn);
-
         li.appendChild(left);
         li.appendChild(right);
         this.listElement.appendChild(li);
       });
     }
 
-    exportJSON() {
-      return JSON.stringify(this.data, null, 2);
-    }
+    exportJSON() { return JSON.stringify(this.data, null, 2); }
   }
 
-  // ====== UIManager (wires UI to managers) ======
+  // ====== UIManager ======
   const UIManager = (function() {
     let favManager = null;
     let drawingManager = null;
@@ -372,22 +321,16 @@
       drawer: document.getElementById('drawer'),
       menuBtn: document.getElementById('menuBtn'),
       closeDrawerBtn: document.getElementById('closeDrawerBtn'),
-      saveFavBtn: document.getElementById('saveFavBtn'),
+      newViewBtn: document.getElementById('newViewBtn'),
+      saveNewViewBtn: document.getElementById('saveNewViewBtn'),
+      cancelNewViewBtn: document.getElementById('cancelNewViewBtn'),
+      saveCancelWrapper: document.getElementById('saveCancelWrapper'),
       favoritesList: document.getElementById('favoritesList'),
       editBanner: document.getElementById('editBanner'),
       editingFavName: document.getElementById('editingFavName'),
       saveChangesBtn: document.getElementById('saveChangesBtn'),
       cancelEditBtn: document.getElementById('cancelEditBtn'),
-      exportBtn: document.getElementById('exportBtn'),
-      darkModeToggle: document.getElementById('darkModeToggle'),
-      ferrarisToggle: document.getElementById('ferrarisToggle'),
-      grbToggle: document.getElementById('grbToggle'),
-      hillshadeToggle: document.getElementById('hillshadeToggle'),
-      opacitySliderFerraris: document.getElementById('opacitySliderFerraris'),
-      opacitySliderGRB: document.getElementById('opacitySliderGRB'),
-      opacitySliderHillshade: document.getElementById('opacitySliderHillshade'),
-      autoPanToggle: document.getElementById('autoPanToggle'),
-      saveFavBtnEl: null
+      darkModeToggle: document.getElementById('darkModeToggle')
     };
 
     function init(managers) {
@@ -398,11 +341,31 @@
       cache.menuBtn.addEventListener('click', () => { cache.drawer.classList.add('open'); cache.menuBtn.classList.add('hidden'); });
       cache.closeDrawerBtn.addEventListener('click', () => { cache.drawer.classList.remove('open'); cache.menuBtn.classList.remove('hidden'); });
 
-      // Save current view (create new favorite)
-      cache.saveFavBtn.addEventListener('click', () => {
-        const name = prompt('Enter a name for this location:');
+      // Create New View
+      cache.newViewBtn.addEventListener('click', () => {
+        drawingManager.clear();
+        drawingManager.enableEditMode();
+        cache.newViewBtn.style.display = 'none';
+        cache.saveCancelWrapper.style.display = 'flex';
+      });
+
+      // Save New View
+      cache.saveNewViewBtn.addEventListener('click', () => {
+        const name = prompt('Enter a name for this view:');
         if (!name) return;
         favManager.addFavorite(name);
+        drawingManager.disableEditMode();
+        drawingManager.clear();
+        cache.saveCancelWrapper.style.display = 'none';
+        cache.newViewBtn.style.display = 'flex';
+      });
+
+      // Cancel New View
+      cache.cancelNewViewBtn.addEventListener('click', () => {
+        drawingManager.clear();
+        drawingManager.disableEditMode();
+        cache.saveCancelWrapper.style.display = 'none';
+        cache.newViewBtn.style.display = 'flex';
       });
 
       // Save changes (only while editing)
@@ -415,17 +378,6 @@
         if (!confirm('Discard edits?')) return;
         favManager.cancelEdit();
         hideEditBanner();
-      });
-
-      // Export favorites JSON to clipboard
-      cache.exportBtn.addEventListener('click', async () => {
-        try {
-          const json = favManager.exportJSON();
-          await navigator.clipboard.writeText(json);
-          alert('Favorites JSON copied to clipboard.');
-        } catch (err) {
-          alert('Export failed: ' + (err && err.message ? err.message : err));
-        }
       });
 
       // dark mode
@@ -448,49 +400,36 @@
     return { init, showEditBanner, hideEditBanner };
   })();
 
-  // ====== Map initialization and wiring everything ======
+  // ====== Map initialization ======
   const map = L.map('map').setView([50.85, 4.35], 8);
 
-  const googleHybrid = L.tileLayer(
-    'https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
+  const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
     { subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' }
   ).addTo(map);
 
-  const ferraris = L.tileLayer(
-    'https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
+  const ferraris = L.tileLayer('https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
     { attribution: '© Vlaanderen', opacity: 0.7 }
   ).addTo(map);
 
-  const grb = L.tileLayer(
-    'https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+  const grb = L.tileLayer('https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
     { attribution: '© Vlaanderen GRB', opacity: 0.7 }
   );
 
-  const hillshade = L.tileLayer(
-  'https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-  '&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL' +
-  '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-  { attribution: '© Vlaanderen DHMV II', opacity: 0.7 }
-);
+  const hillshade = L.tileLayer('https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+    { attribution: '© Vlaanderen DHMV II', opacity: 0.7 }
+  );
 
   map.zoomControl.setPosition('bottomright');
 
-const geocoder = L.Control.geocoder({
-  defaultMarkGeocode: false,
-  placeholder: 'Search location...',
-  errorMessage: 'Not found'
-})
-.on('markgeocode', function(e) {
-  map.setView(e.geocode.center, 16); // no marker added
-})
-.addTo(map);
+  const geocoder = L.Control.geocoder({ defaultMarkGeocode: false, placeholder: 'Search location...', errorMessage: 'Not found' })
+    .on('markgeocode', function(e) { map.setView(e.geocode.center, 16); })
+    .addTo(map);
 
   const drawingManager = new DrawingManager(map);
   const favManager = new FavoriteManager(map, drawingManager, document.getElementById('favoritesList'));
-
   UIManager.init({ favManager, drawingManager });
 
-  // wire overlay toggles and opacity sliders
+  // Overlay toggles
   document.getElementById('ferrarisToggle').addEventListener('change', e => e.target.checked ? ferraris.addTo(map) : map.removeLayer(ferraris));
   document.getElementById('grbToggle').addEventListener('change', e => e.target.checked ? grb.addTo(map) : map.removeLayer(grb));
   document.getElementById('hillshadeToggle').addEventListener('change', e => e.target.checked ? hillshade.addTo(map) : map.removeLayer(hillshade));
@@ -499,8 +438,7 @@ const geocoder = L.Control.geocoder({
   document.getElementById('opacitySliderHillshade').addEventListener('input', e => hillshade.setOpacity(e.target.value));
 
   // Auto-pan logic
-  let userMarker = null;
-  let autoPan = false;
+  let userMarker = null, autoPan = false;
   const autoPanToggle = document.getElementById('autoPanToggle');
   autoPanToggle.addEventListener('change', e => autoPan = e.target.checked);
 
