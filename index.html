@@ -35,7 +35,7 @@
     .btn-edit{background:#ffd966}
     .btn-delete{background:none;color:#c00}
     .btn-save{background:#28a745;color:#fff;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}
-    .drawer-footer{margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-size:14px}
+    .drawer-footer{margin-top:0px;display:flex;align-items:center;justify-content:space-between;font-size:14px}
     .controls-inline{display:flex;gap:6px;align-items:center}
     .notice{font-size:13px;color:#666}
     .edit-banner{background:#fff3cd;padding:8px;border-radius:6px;border:1px solid #ffeeba;margin-bottom:8px}
@@ -99,11 +99,7 @@
     </div>
 
     <div class="drawer-footer">
-      <div>
-        <label for="darkModeToggle">Dark mode</label>
-        <input type="checkbox" id="darkModeToggle" />
-      </div>
-      <div class="notice">Tip: Draw shapes, open a favorite, edit & save.</div>
+
     </div>
   </div>
 
@@ -330,8 +326,7 @@
       editBanner: document.getElementById('editBanner'),
       editingFavName: document.getElementById('editingFavName'),
       saveChangesBtn: document.getElementById('saveChangesBtn'),
-      cancelEditBtn: document.getElementById('cancelEditBtn'),
-      darkModeToggle: document.getElementById('darkModeToggle')
+      cancelEditBtn: document.getElementById('cancelEditBtn')
     };
 
     function init(managers) {
@@ -381,11 +376,6 @@
         hideEditBanner();
       });
 
-      // dark mode
-      cache.darkModeToggle.addEventListener('change', e => {
-        cache.drawer.classList.toggle('dark', e.target.checked);
-        document.body.style.background = e.target.checked ? '#1e1e1e' : '#f4f4f4';
-      });
     }
 
     function showEditBanner(name) {
