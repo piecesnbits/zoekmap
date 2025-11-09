@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#2196f3">
   <link rel="shortcut icon" href="/zoekmap/favicon.ico" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="manifest" href="https://piecesnbits.github.io/zoekmap/manifest.json?v=2" />
   <title>Zoekmap</title>
 
@@ -398,7 +399,7 @@ class ShareManager {
 
         const editBtn = document.createElement('button');
         editBtn.className = 'btn-small';
-        editBtn.innerHTML = '✏️';                // pencil icon
+        editBtn.innerHTML = '<span class="material-icons">edit</span>';                // pencil icon
         editBtn.title = 'Edit shapes in this favorite';
 
         editBtn.addEventListener('click', (e) => {
@@ -409,7 +410,7 @@ class ShareManager {
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn-small btn-delete';
-        deleteBtn.textContent = '✕';
+        deleteBtn.innerHTML = '<span class="material-icons">close</span>';
         deleteBtn.title = 'Delete favorite';
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -418,7 +419,7 @@ class ShareManager {
 
         const shareBtn = document.createElement('button');
         shareBtn.className = 'btn-small';
-        shareBtn.innerHTML = '🔗';     // clean, universal share glyph
+        shareBtn.innerHTML = '<span class="material-icons">share</span>';     // clean, universal share glyph
         shareBtn.title = 'Share this favorite';
 
         shareBtn.addEventListener('click', (e) => {
