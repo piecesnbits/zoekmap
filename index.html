@@ -21,6 +21,8 @@
   <style>
     html,body{height:100%;margin:0;font-family:Inter,system-ui,sans-serif;background:#f4f4f4;overflow:hidden}
     #map{height:100%;width:100%}
+    .layer-item{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
+    .slider{width:120px;margin-left:8px}
     .menu-btn{position:absolute;top:15px;left:15px;z-index:1100;background:#0078ff;color:#fff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.2);font-weight:500}
     .menu-btn.hidden{opacity:0;pointer-events:none}
     .drawer{position:absolute;top:0;left:0;height:100%;width:320px;background:rgba(255,255,255,.97);box-shadow:2px 0 10px rgba(0,0,0,.2);backdrop-filter:blur(8px);transform:translateX(-100%);transition:transform .3s;z-index:1200;display:flex;flex-direction:column;padding:16px}
@@ -33,14 +35,14 @@
     .fav-left{display:flex;gap:8px;align-items:center}
     .fav-name{cursor:pointer;font-weight:500}
     .fav-actions{display:flex;gap:6px;align-items:center}
-.btn-small {
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 0;
-  cursor: pointer;
-  font-size: 16px;   /* slightly larger for emoji icons */
-  line-height: 1;
-}
+    .btn-small {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 0;
+      cursor: pointer;
+      font-size: 16px;   /* slightly larger for emoji icons */
+      line-height: 1;
+    }
 
     .btn-delete{background:none;color:#c00}
     .btn-save{background:#28a745;color:#fff;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}
@@ -68,15 +70,15 @@
     <div class="section">
       <h3>Overlays</h3>
       <div class="layer-item">
-        <label><input type="checkbox" id="ferrarisToggle" checked /> Ferraris Overlay</label>
+        <label><input type="checkbox" id="ferrarisToggle" checked /> Ferraris</label>
         <input id="opacitySliderFerraris" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
       <div class="layer-item">
-        <label><input type="checkbox" id="grbToggle" /> GRB Overlay</label>
+        <label><input type="checkbox" id="grbToggle" /> GRB</label>
         <input id="opacitySliderGRB" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
       <div class="layer-item">
-        <label><input type="checkbox" id="hillshadeToggle" /> Hillshade Overlay</label>
+        <label><input type="checkbox" id="hillshadeToggle" /> Hillshade</label>
         <input id="opacitySliderHillshade" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
       <div class="layer-item">
@@ -116,6 +118,81 @@
   <div id="map"></div>
 
   <script>
+
+
+
+class UserLocationMarker {
+  constructor(map) {
+    this.map = map;
+    this.marker = null;
+    this._injectStyles();
+  }
+
+  updatePosition(lat, lng) {
+    const latlng = [lat, lng];
+
+    if (!this.marker) {
+      this.marker = L.marker(latlng, {
+        icon: L.divIcon({
+          className: 'user-pulse-marker',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        })
+      }).addTo(this.map);
+    } else {
+      this.marker.setLatLng(latlng);
+    }
+  }
+
+  _injectStyles() {
+    if (document.getElementById('pulse-style')) return;
+
+    const css = `
+      .user-pulse-marker {
+        position: relative;
+      }
+      .user-pulse-marker::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        background: #4285f4;
+        border-radius: 50%;
+        border: 1px solid #fff;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        box-shadow: 0 0 6px rgba(66,133,244,0.6);
+      }
+      .user-pulse-marker::after {
+        content: "";
+        width: 15px;
+        height: 15px;
+        background: rgba(66,133,244,0.4);
+        border-radius: 50%;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        animation: user-pulse 1.6s ease-out infinite;
+      }
+      @keyframes user-pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.9;
+        }
+        100% {
+          transform: scale(2.8);
+          opacity: 0;
+        }
+      }
+    `;
+
+    const style = document.createElement('style');
+    style.id = 'pulse-style';
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+}
+
 
 class ShareManager {
   static compress(obj) {
@@ -506,14 +583,20 @@ class ShareManager {
   const autoPanToggle = document.getElementById('autoPanToggle');
   autoPanToggle.addEventListener('change', e => autoPan = e.target.checked);
 
-  if (navigator.geolocation) {
-    navigator.geolocation.watchPosition(pos => {
-      const latlng = [pos.coords.latitude, pos.coords.longitude];
-      if (!userMarker) userMarker = L.circleMarker(latlng, { radius: 7, color: '#0078ff', fillColor: '#0078ff', fillOpacity: .9 }).addTo(map);
-      else userMarker.setLatLng(latlng);
-      if (autoPan) map.setView(latlng);
-    }, err => console.warn(err), { enableHighAccuracy: true, maximumAge: 1000 });
-  }
+const userMarkerController = new UserLocationMarker(map);
+
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    pos => {
+      const { latitude, longitude } = pos.coords;
+      userMarkerController.updatePosition(latitude, longitude);
+
+      if (autoPan) map.setView([latitude, longitude]);
+    },
+    err => console.warn(err),
+    { enableHighAccuracy: true, maximumAge: 1000 }
+  );
+} 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('https://piecesnbits.github.io/zoekmap/sw.js')
       .then(() => console.log('Service Worker registered'))
