@@ -2,7 +2,7 @@
   "name": "Zoekmap",
   "short_name": "Zoekmap",
   "description": "Historic Map Viewer with Favorites and Editable Shapes",
-  "start_url": "/zoekmap/index.html",
+  "start_url": "/zoekmap/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2196f3",
