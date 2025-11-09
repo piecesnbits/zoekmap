@@ -16,6 +16,7 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
 
   <style>
     html,body{height:100%;margin:0;font-family:Inter,system-ui,sans-serif;background:#f4f4f4;overflow:hidden}
@@ -32,8 +33,15 @@
     .fav-left{display:flex;gap:8px;align-items:center}
     .fav-name{cursor:pointer;font-weight:500}
     .fav-actions{display:flex;gap:6px;align-items:center}
-    .btn-small{padding:4px 8px;border-radius:6px;border:0;cursor:pointer;font-size:13px}
-    .btn-edit{background:#ffd966}
+.btn-small {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;   /* slightly larger for emoji icons */
+  line-height: 1;
+}
+
     .btn-delete{background:none;color:#c00}
     .btn-save{background:#28a745;color:#fff;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}
     .drawer-footer{margin-top:0px;display:flex;align-items:center;justify-content:space-between;font-size:14px}
@@ -108,6 +116,35 @@
   <div id="map"></div>
 
   <script>
+
+class ShareManager {
+  static compress(obj) {
+    return LZString.compressToEncodedURIComponent(JSON.stringify(obj));
+  }
+
+  static decompress(str) {
+    try {
+      return JSON.parse(LZString.decompressFromEncodedURIComponent(str));
+    } catch {
+      return null;
+    }
+  }
+
+  static generateShareURL(favObj) {
+    const payload = this.compress(favObj);
+    const url = new URL(window.location.href);
+    url.searchParams.set('favdata', payload);
+    return url.toString();
+  }
+
+  static loadSharedFavorite() {
+    const params = new URLSearchParams(window.location.search);
+    const data = params.get('favdata');
+    if (!data) return null;
+    return this.decompress(data);
+  }
+}
+  
   // ====== DrawingManager ======
   class DrawingManager {
     constructor(map) {
@@ -283,9 +320,10 @@
         right.className = 'fav-actions';
 
         const editBtn = document.createElement('button');
-        editBtn.className = 'btn-small btn-edit';
-        editBtn.textContent = 'Edit';
+        editBtn.className = 'btn-small';
+        editBtn.innerHTML = '✏️';                // pencil icon
         editBtn.title = 'Edit shapes in this favorite';
+
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           UIManager.showEditBanner(this.data[i].name);
@@ -301,6 +339,30 @@
           if (confirm(`Delete favorite "${fav.name}"?`)) this.deleteFavorite(i);
         });
 
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'btn-small';
+        shareBtn.innerHTML = '🔗';     // clean, universal share glyph
+        shareBtn.title = 'Share this favorite';
+
+        shareBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+
+          const favObj = this.data[i];
+          const url = ShareManager.generateShareURL(favObj);
+
+          if (navigator.share) {
+            navigator.share({
+              title: favObj.name,
+              text: 'Shared via Zoekmap',
+              url
+            });
+          } else {
+            navigator.clipboard.writeText(url);
+            alert('Share link copied to clipboard');
+          }
+        });
+
+        right.appendChild(shareBtn);
         right.appendChild(editBtn);
         right.appendChild(deleteBtn);
         li.appendChild(left);
@@ -422,6 +484,14 @@
   const drawingManager = new DrawingManager(map);
   const favManager = new FavoriteManager(map, drawingManager, document.getElementById('favoritesList'));
   UIManager.init({ favManager, drawingManager });
+
+  const shared = ShareManager.loadSharedFavorite();
+  if (shared) {
+    drawingManager.loadGeoJSON(shared.shapes);
+    map.setView(shared.center, shared.zoom);
+
+    // optional: show banner: "This is a shared view, save it?"
+  }
 
   // Overlay toggles
   document.getElementById('ferrarisToggle').addEventListener('change', e => e.target.checked ? ferraris.addTo(map) : map.removeLayer(ferraris));
