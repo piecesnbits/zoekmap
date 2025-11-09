@@ -126,11 +126,13 @@ class UserLocationMarker {
   constructor(map) {
     this.map = map;
     this.marker = null;
+    this.lastPosition = null; // store last known position
     this._injectStyles();
   }
 
   updatePosition(lat, lng) {
     const latlng = [lat, lng];
+    this.lastPosition = [lat, lng]; // store position
 
     if (!this.marker) {
       this.marker = L.marker(latlng, {
@@ -572,6 +574,8 @@ const ferraris = L.tileLayer(
   const geocoder = L.Control.geocoder({ defaultMarkGeocode: false, placeholder: 'Search location...', errorMessage: 'Not found' })
     .on('markgeocode', function(e) { map.setView(e.geocode.center, 16); })
     .addTo(map);
+  
+
 
   const drawingManager = new DrawingManager(map);
   const favManager = new FavoriteManager(map, drawingManager, document.getElementById('favoritesList'));
@@ -599,7 +603,6 @@ const ferraris = L.tileLayer(
   autoPanToggle.addEventListener('change', e => autoPan = e.target.checked);
 
 const userMarkerController = new UserLocationMarker(map);
-
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(
     pos => {
@@ -612,6 +615,33 @@ if (navigator.geolocation) {
     { enableHighAccuracy: true, maximumAge: 1000 }
   );
 } 
+
+const locateButton = L.control({ position: 'topright' });
+locateButton.onAdd = map => {
+  const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+  div.innerHTML = `
+    <a href="#" title="Go to my location" style="
+      display: block;
+      line-height: 26px; /* match Leaflet button height */
+      text-align: center;
+      text-decoration: none;
+      color: inherit;
+    ">
+      <span class="material-icons" style="vertical-align: middle; font-size: 20px;">gps_fixed</span>
+    </a>
+  `;
+  div.onclick = () => {
+    if (userMarkerController.lastPosition) {
+      map.setView(userMarkerController.lastPosition, 16);
+    } else {
+      alert("Location not available yet");
+    }
+  };
+  return div;
+};
+locateButton.addTo(map);
+
+  // Service Worker registration
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('https://piecesnbits.github.io/zoekmap/sw.js')
       .then(() => console.log('Service Worker registered'))
