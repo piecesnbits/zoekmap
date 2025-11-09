@@ -540,9 +540,23 @@ class ShareManager {
     { subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' }
   ).addTo(map);
 
-  const ferraris = L.tileLayer('https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
-    { attribution: '© Vlaanderen', opacity: 1.0 }
-  ).addTo(map);
+
+// Define the geographic bounds of the Ferraris layer (example)
+const ferrarisBounds = [
+  [50.685, 2.53],   // southwest corner (lat, lng)
+  [51.520, 5.92]    // northeast corner (lat, lng)
+];
+
+const ferraris = L.tileLayer(
+  'https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
+  {
+    attribution: '© Vlaanderen',
+    opacity: 1.0,
+    bounds: ferrarisBounds, // restrict tile requests to layer extent
+    noWrap: true,           // don’t repeat tiles outside world bounds
+    continuousWorld: false  // prevent extra out-of-range requests
+  }
+).addTo(map);
 
   const grb = L.tileLayer('https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
     { attribution: '© Vlaanderen GRB', opacity: 1.0 }
