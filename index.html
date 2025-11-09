@@ -209,6 +209,7 @@
       this.data.splice(index, 1);
       this.saveStorage();
       this._renderList();
+      this.drawingManager.clear();
       if (this.activeIndex === index) this.activeIndex = null;
       if (this.editIndex === index) this.editIndex = null;
     }
