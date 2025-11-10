@@ -23,16 +23,18 @@
     html,body{height:100%;margin:0;font-family:Inter,system-ui,sans-serif;background:#f4f4f4;overflow:hidden}
     #map{height:100%;width:100%}
     .layer-item{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
-  .layer-select {
-    width: 100%;
-    padding: 6px;
-    font-size: 15px;
+      #base-layer-select {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
   }
-  .layer-select option {
-    padding-left: 28px;
-    background-size: 24px 24px;
-    background-position: 2px center;
+
+  /* optional icons inside select */
+  #base-layer-select option {
     background-repeat: no-repeat;
+    background-size: 18px;
+    padding-left: 24px;
   }
     .slider{width:120px;margin-left:8px}
     .menu-btn{position:absolute;top:15px;left:15px;z-index:1100;background:#0078ff;color:#fff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.2);font-weight:500}
@@ -72,12 +74,13 @@
     <button class="close-btn" id="closeDrawerBtn">✕</button>
     <h2>Map Controls</h2>
 
-<div class="section">
-  <h3>🌍 Base Layers</h3>
+    <div class="section">
+      <h3>🌍 Base Layers</h3>
+      <div class="layer-item">
+        <label><input type="radio" name="baseLayer" value="google" checked /> Google Hybrid</label>
+      </div>
 
-  <select id="base-layer-select" class="layer-select">
-  </select>
-</div>
+    </div>
 
     <div class="section">
       <h3>🗺️ Overlays</h3>
@@ -131,48 +134,6 @@
 
   <script>
 
-class BaseLayerController {
-  constructor(map, selectId) {
-    this.map = map;
-    this.select = document.getElementById(selectId);
-    this.baseLayers = {};
-    this.activeBase = null;
-
-    this.select.addEventListener("change", () => {
-      this.setBase(this.select.value);
-    });
-  }
-
-  addBase(key, config) {
-    this.baseLayers[key] = config.tileLayer;
-
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = config.label;
-
-    if (config.icon) {
-      option.style.backgroundImage = `url(${config.icon})`;
-    }
-
-    this.select.appendChild(option);
-
-    if (!this.activeBase) {
-      this.setBase(key);
-    }
-  }
-
-  setBase(key) {
-    const layer = this.baseLayers[key];
-    if (!layer) return;
-
-    if (this.activeBase) {
-      this.map.removeLayer(this.activeBase);
-    }
-
-    layer.addTo(this.map);
-    this.activeBase = layer;
-  }
-}
 
 
 class UserLocationMarker {
@@ -592,97 +553,13 @@ class ShareManager {
   // ====== Map initialization ======
   const map = L.map('map').setView([50.85, 4.35], 9);
 
-const baseLayerCtrl = new BaseLayerController(map, "base-layer-select");
-
-// 1 Google Hybrid
-baseLayerCtrl.addBase("googleHybrid", {
-  label: "Google Hybrid",
-  icon: "https://www.google.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-    { subdomains: ["mt0","mt1","mt2","mt3"], attribution: "© Google" }
-  )
-});
-
-// 2 Google Satellite
-baseLayerCtrl.addBase("googleSatellite", {
-  label: "Google Satellite",
-  icon: "https://www.google.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-    { subdomains: ["mt0","mt1","mt2","mt3"], attribution: "© Google" }
-  )
-});
-
-
-
-// 3 Google Terrain
-baseLayerCtrl.addBase("googleTerrain", {
-  label: "Google Terrain",
-  icon: "https://www.google.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-    { subdomains: ["mt0","mt1","mt2","mt3"], attribution: "© Google" }
-  )
-});
-
-// 4 OpenStreetMap
-baseLayerCtrl.addBase("osm", {
-  label: "OpenStreetMap",
-  icon: "https://www.openstreetmap.org/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    { attribution: "© OSM contributors" }
-  )
-});
-
-// 5 OpenTopoMap
-baseLayerCtrl.addBase("opentopo", {
-  label: "OpenTopoMap",
-  icon: "https://opentopomap.org/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    { attribution: "© OpenTopoMap CC-BY-SA" }
-  )
-});
-
-// 6 Carto Light
-baseLayerCtrl.addBase("cartoLight", {
-  label: "Carto Light",
-  icon: "https://carto.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    { attribution: "© Carto" }
-  )
-});
-
-// 7 Carto Dark
-baseLayerCtrl.addBase("cartoDark", {
-  label: "Carto Dark",
-  icon: "https://carto.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    { attribution: "© Carto" }
-  )
-});
-
-// 8 ESRI World Imagery
-baseLayerCtrl.addBase("esri", {
-  label: "ESRI World Imagery",
-  icon: "https://www.esri.com/favicon.ico",
-  tileLayer: L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { attribution: "Tiles © Esri" }
-  )
-});
+  const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
+    { subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' }
+  ).addTo(map);
 
 
 
 
-
-
-map.createPane('overlayPaneTop');
-map.getPane('overlayPaneTop').style.zIndex = 650; // above base layers (default: 200-400)
 // Define the geographic bounds of the Ferraris layer (example)
 const ferrarisBounds = [
   [50.685, 2.53],   // southwest corner (lat, lng)
@@ -694,7 +571,6 @@ const ferraris = L.tileLayer(
   {
     attribution: '© Vlaanderen',
     opacity: 1.0,
-    pane: 'overlayPaneTop',
     bounds: ferrarisBounds, // restrict tile requests to layer extent
     noWrap: true,           // don’t repeat tiles outside world bounds
     continuousWorld: false  // prevent extra out-of-range requests
@@ -702,11 +578,11 @@ const ferraris = L.tileLayer(
 ).addTo(map);
 
   const grb = L.tileLayer('https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-    { attribution: '© Vlaanderen GRB', opacity: 1.0, pane: 'overlayPaneTop' }
+    { attribution: '© Vlaanderen GRB', opacity: 1.0 }
   );
 
   const hillshade = L.tileLayer('https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-    { attribution: '© Vlaanderen DHMV II', opacity: 1.0, pane: 'overlayPaneTop' }
+    { attribution: '© Vlaanderen DHMV II', opacity: 1.0 }
   );
 
   map.zoomControl.setPosition('bottomright');
