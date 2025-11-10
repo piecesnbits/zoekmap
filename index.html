@@ -94,6 +94,10 @@
         <input id="opacitySliderHillshade" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
       <div class="layer-item">
+        <label><input type="checkbox" id="dhmvToggle" /> dhmv</label>
+        <input id="opacitySliderDhmv" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
+      </div>
+      <div class="layer-item">
         <label><input type="checkbox" id="autoPanToggle" /> Auto-pan location</label>
       </div>
     </div>
@@ -709,6 +713,27 @@ const ferraris = L.tileLayer(
     { attribution: '© Vlaanderen DHMV II', opacity: 1.0, pane: 'overlayPaneTop' }
   );
 
+
+  const dhmvBounds = [
+  [50.64, 2.52],   // southwest (lat, lng)
+  [51.51, 5.94]    // northeast (lat, lng)
+];
+
+const dhmv = L.tileLayer.wms(
+  'https://geo.api.vlaanderen.be/DHMV/wms',
+  {
+    layers: 'DHMVII_DTM_1m',  // kies eventueel 'DHMVII_DSM_1m' of andere
+    format: 'image/png',
+    transparent: true,
+    attribution: '© Vlaanderen',
+    pane: 'overlayPaneTop',
+    bounds: dhmvBounds,
+    noWrap: true,
+    continuousWorld: false,
+    version: '1.3.0'
+  }
+);
+
   map.zoomControl.setPosition('bottomright');
 
   const geocoder = L.Control.geocoder({ defaultMarkGeocode: false, placeholder: 'Search location...', errorMessage: 'Not found' })
@@ -730,12 +755,17 @@ const ferraris = L.tileLayer(
   }
 
   // Overlay toggles
+
+  dhmv
   document.getElementById('ferrarisToggle').addEventListener('change', e => e.target.checked ? ferraris.addTo(map) : map.removeLayer(ferraris));
   document.getElementById('grbToggle').addEventListener('change', e => e.target.checked ? grb.addTo(map) : map.removeLayer(grb));
   document.getElementById('hillshadeToggle').addEventListener('change', e => e.target.checked ? hillshade.addTo(map) : map.removeLayer(hillshade));
+    document.getElementById('dhmvToggle').addEventListener('change', e => e.target.checked ? dhmv.addTo(map) : map.removeLayer(dhmv));
+
   document.getElementById('opacitySliderFerraris').addEventListener('input', e => ferraris.setOpacity(e.target.value));
   document.getElementById('opacitySliderGRB').addEventListener('input', e => grb.setOpacity(e.target.value));
   document.getElementById('opacitySliderHillshade').addEventListener('input', e => hillshade.setOpacity(e.target.value));
+    document.getElementById('opacitySliderDhmv').addEventListener('input', e => dhmv.setOpacity(e.target.value));
 
   // Auto-pan logic
   let userMarker = null, autoPan = false;
