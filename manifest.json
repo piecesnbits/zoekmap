@@ -2,18 +2,18 @@
   "name": "Zoekmap",
   "short_name": "Zoekmap",
   "description": "Historic Map Viewer with Favorites and Editable Shapes",
-  "start_url": "/zoekmap/",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2196f3",
   "icons": [
     {
-      "src": "/zoekmap/icons/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/zoekmap/icons/icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

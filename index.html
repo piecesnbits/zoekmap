@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2196f3">
   <link rel="shortcut icon" href="./favicon.ico" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="manifest" href="./manifest.json?v=3" />
+  <link rel="manifest" href="./manifest.json?v=4" />
   <title>Zoekmap</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1016,7 +1016,7 @@ class DrawingManager {
 
     // Service Worker registration
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('https://piecesnbits.github.io/zoekmap/sw.js')
+      navigator.serviceWorker.register('/sw.js')
         .then(() => console.log('Service Worker registered'))
         .catch(err => console.error('Service Worker registration failed:', err));
     }
