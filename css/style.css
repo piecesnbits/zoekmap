@@ -185,3 +185,90 @@
       border: 1px solid #ffeeba;
       margin-bottom: 8px
   }
+
+
+      .user-pulse-marker {
+        position: relative;
+      }
+      .user-pulse-marker::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        background: #4285f4;
+        border-radius: 50%;
+        border: 1px solid #fff;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        box-shadow: 0 0 6px rgba(66,133,244,0.6);
+      }
+      .user-pulse-marker::after {
+        content: "";
+        width: 15px;
+        height: 15px;
+        background: rgba(66,133,244,0.4);
+        border-radius: 50%;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        animation: user-pulse 1.6s ease-out infinite;
+      }
+      @keyframes user-pulse {
+        0% { transform: scale(1); opacity: 0.9; }
+        100% { transform: scale(2.8); opacity: 0; }
+      }
+
+
+.blc-dropdown {
+  position: relative;
+  display: inline-block;
+  width: 200px;
+  font-family: sans-serif;
+}
+
+.blc-selected {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.blc-selected img.blc-selected-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.blc-options {
+  display: none; /* hidden by default */
+  position: absolute;
+  background: #fff;
+  border: 1px solid #ccc;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.blc-options.blc-show {
+  display: block; /* visible when dropdown is open */
+}
+
+.blc-option {
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.blc-option:hover {
+  background: #eee;
+}
+
+.blc-option img.blc-option-icon {
+  width: 20px;
+  height: 20px;
+}

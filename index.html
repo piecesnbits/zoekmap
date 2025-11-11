@@ -12,17 +12,14 @@
   <link rel="stylesheet" href="./css/style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.css" />
   <script src="https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.js"></script>
-
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script src="./js/UserLocationManager.js"></script>
-
   <style>
-  
+
   </style>
 </head>
 
@@ -101,30 +98,93 @@
     class BaseLayerController {
       constructor(map, selectId) {
         this.map = map;
-        this.select = document.getElementById(selectId);
         this.baseLayers = {};
         this.activeBase = null;
 
-        this.select.addEventListener("change", () => {
-          this.setBase(this.select.value);
+        this.originalSelect = document.getElementById(selectId);
+        this.originalSelect.style.display = "none";
+
+        // Create custom dropdown
+        this.dropdown = document.createElement("div");
+        this.dropdown.className = "blc-dropdown";
+
+        this.selected = document.createElement("div");
+        this.selected.className = "blc-selected";
+        this.selected.textContent = "Select base layer";
+        this.dropdown.appendChild(this.selected);
+
+        this.optionsContainer = document.createElement("div");
+        this.optionsContainer.className = "blc-options";
+        this.dropdown.appendChild(this.optionsContainer);
+
+        this.originalSelect.parentNode.insertBefore(this.dropdown, this.originalSelect);
+
+        // Toggle dropdown visibility
+        this.selected.addEventListener("click", () => {
+          this.optionsContainer.classList.toggle("blc-show");
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener("click", (e) => {
+          if (!this.dropdown.contains(e.target)) {
+            this.optionsContainer.classList.remove("blc-show");
+          }
         });
       }
 
       addBase(key, config) {
         this.baseLayers[key] = config.tileLayer;
 
+        // Original select option
         const option = document.createElement("option");
         option.value = key;
         option.textContent = config.label;
+        this.originalSelect.appendChild(option);
+
+        // Custom option
+        const customOption = document.createElement("div");
+        customOption.className = "blc-option";
+        customOption.dataset.key = key;
 
         if (config.icon) {
-          option.style.backgroundImage = `url(${config.icon})`;
+          const img = document.createElement("img");
+          img.src = config.icon;
+          img.alt = "";
+          img.className = "blc-option-icon";
+          customOption.appendChild(img);
         }
 
-        this.select.appendChild(option);
+        const label = document.createElement("span");
+        label.textContent = config.label;
+        customOption.appendChild(label);
 
-        if (!this.activeBase) {
+        // Click behavior
+        customOption.addEventListener("click", () => {
           this.setBase(key);
+
+          // Update selected box
+          this.selected.innerHTML = "";
+          if (config.icon) {
+            const imgClone = customOption.querySelector("img").cloneNode();
+            imgClone.className = "blc-selected-icon";
+            this.selected.appendChild(imgClone);
+          }
+          const text = document.createElement("span");
+          text.textContent = config.label;
+          this.selected.appendChild(text);
+
+          // Hide options
+          this.optionsContainer.classList.remove("blc-show");
+
+          // Update original select
+          this.originalSelect.value = key;
+        });
+
+        this.optionsContainer.appendChild(customOption);
+
+        // Automatically select first layer
+        if (!this.activeBase) {
+          customOption.click();
         }
       }
 
@@ -142,6 +202,7 @@
     }
 
 
+
     class UserLocationMarker {
       constructor(map) {
         this.map = map;
@@ -149,7 +210,6 @@
         this.lastPosition = null;
 
         this._createPane();
-        this._injectStyles();
       }
 
       _createPane() {
@@ -179,47 +239,6 @@
         }
       }
 
-      _injectStyles() {
-        if (document.getElementById('pulse-style')) return;
-
-        const css = `
-      .user-pulse-marker {
-        position: relative;
-      }
-      .user-pulse-marker::before {
-        content: "";
-        width: 14px;
-        height: 14px;
-        background: #4285f4;
-        border-radius: 50%;
-        border: 1px solid #fff;
-        position: absolute;
-        top: 3px;
-        left: 3px;
-        box-shadow: 0 0 6px rgba(66,133,244,0.6);
-      }
-      .user-pulse-marker::after {
-        content: "";
-        width: 15px;
-        height: 15px;
-        background: rgba(66,133,244,0.4);
-        border-radius: 50%;
-        position: absolute;
-        top: 3px;
-        left: 3px;
-        animation: user-pulse 1.6s ease-out infinite;
-      }
-      @keyframes user-pulse {
-        0% { transform: scale(1); opacity: 0.9; }
-        100% { transform: scale(2.8); opacity: 0; }
-      }
-    `;
-
-        const style = document.createElement('style');
-        style.id = 'pulse-style';
-        style.textContent = css;
-        document.head.appendChild(style);
-      }
     }
 
 
@@ -251,119 +270,119 @@
       }
     }
 
-// ====== DrawingManager ======
-class DrawingManager {
-  constructor(map) {
-    this.map = map;
+    // ====== DrawingManager ======
+    class DrawingManager {
+      constructor(map) {
+        this.map = map;
 
-    // Create a dedicated pane for drawings (above overlays)
-    this.paneName = "custom-drawing-pane";
-    this._ensurePane();
+        // Create a dedicated pane for drawings
+        this.paneName = "custom-drawing-pane";
+        this._ensurePane();
 
-    // FeatureGroup with the correct pane
-    this.drawnItems = new L.FeatureGroup(null, {
-      pane: this.paneName
-    });
-    this.map.addLayer(this.drawnItems);
+        // FeatureGroup with the correct pane
+        this.drawnItems = new L.FeatureGroup(null, {
+          pane: this.paneName
+        });
+        this.map.addLayer(this.drawnItems);
 
-    // Draw controls
-    this.drawControl = new L.Control.Draw({
-      position: 'topright',
-      draw: {
-        polygon: true,
-        polyline: false,
-        rectangle: false,
-        circle: false,
-        marker: true
-      },
-      edit: false
-    });
+        // Draw controls
+        this.drawControl = new L.Control.Draw({
+          position: 'topright',
+          draw: {
+            polygon: true,
+            polyline: false,
+            rectangle: false,
+            circle: false,
+            marker: true
+          },
+          edit: false
+        });
 
-    this.editControl = null;
+        this.editControl = null;
 
-    // Handle new drawings
-    this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
-  }
-
-  _ensurePane() {
-    if (!this.map.getPane(this.paneName)) {
-      const pane = this.map.createPane(this.paneName);
-      pane.style.zIndex = 700;  // Above overlays
-      pane.style.pointerEvents = "auto";
-    }
-  }
-
-  onCreated(event) {
-    const layer = event.layer;
-    layer.options.pane = this.paneName; // Force layer into drawing pane
-    this.drawnItems.addLayer(layer);
-  }
-
-  clear() {
-    this.drawnItems.clearLayers();
-  }
-
-  loadGeoJSON(geojson) {
-    this.clear();
-    if (!geojson || !geojson.features?.length) return;
-
-    L.geoJSON(geojson, {
-      pane: this.paneName,
-      pointToLayer: (feature, latlng) =>
-        L.marker(latlng, { pane: this.paneName })
-    }).eachLayer(layer => this.drawnItems.addLayer(layer));
-  }
-
-  toGeoJSON() {
-    return this.drawnItems.toGeoJSON();
-  }
-
-  enableEditMode() {
-    if (this.editControl) return;
-
-    if (this.drawControl) this.map.removeControl(this.drawControl);
-
-    this.editControl = new L.Control.Draw({
-      position: 'topright',
-      draw: {
-        polygon: true,
-        polyline: false,
-        rectangle: false,
-        circle: false,
-        marker: true
-      },
-      edit: {
-        featureGroup: this.drawnItems,
-        remove: true
+        // Handle new drawings
+        this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
       }
-    });
 
-    this.map.addControl(this.editControl);
-  }
+      _ensurePane() {
+        if (!this.map.getPane(this.paneName)) {
+          const pane = this.map.createPane(this.paneName);
+          pane.style.zIndex = 700;  // Above overlays
+          pane.style.pointerEvents = "auto";
+        }
+      }
 
-  disableEditMode() {
-    if (this.editControl) {
-      this.map.removeControl(this.editControl);
-      this.editControl = null;
+      onCreated(event) {
+        const layer = event.layer;
+        layer.options.pane = this.paneName; // Force layer into drawing pane
+        this.drawnItems.addLayer(layer);
+      }
+
+      clear() {
+        this.drawnItems.clearLayers();
+      }
+
+      loadGeoJSON(geojson) {
+        this.clear();
+        if (!geojson || !geojson.features?.length) return;
+
+        L.geoJSON(geojson, {
+          pane: this.paneName,
+          pointToLayer: (feature, latlng) =>
+            L.marker(latlng, { pane: this.paneName })
+        }).eachLayer(layer => this.drawnItems.addLayer(layer));
+      }
+
+      toGeoJSON() {
+        return this.drawnItems.toGeoJSON();
+      }
+
+      enableEditMode() {
+        if (this.editControl) return;
+
+        if (this.drawControl) this.map.removeControl(this.drawControl);
+
+        this.editControl = new L.Control.Draw({
+          position: 'topright',
+          draw: {
+            polygon: true,
+            polyline: false,
+            rectangle: false,
+            circle: false,
+            marker: true
+          },
+          edit: {
+            featureGroup: this.drawnItems,
+            remove: true
+          }
+        });
+
+        this.map.addControl(this.editControl);
+      }
+
+      disableEditMode() {
+        if (this.editControl) {
+          this.map.removeControl(this.editControl);
+          this.editControl = null;
+        }
+
+        if (!this.drawControl) {
+          this.drawControl = new L.Control.Draw({
+            position: 'topright',
+            draw: {
+              polygon: true,
+              polyline: false,
+              rectangle: false,
+              circle: false,
+              marker: true
+            },
+            edit: false
+          });
+        }
+
+        this.map.addControl(this.drawControl);
+      }
     }
-
-    if (!this.drawControl) {
-      this.drawControl = new L.Control.Draw({
-        position: 'topright',
-        draw: {
-          polygon: true,
-          polyline: false,
-          rectangle: false,
-          circle: false,
-          marker: true
-        },
-        edit: false
-      });
-    }
-
-    this.map.addControl(this.drawControl);
-  }
-}
 
 
     // ====== FavoriteManager ======
@@ -720,12 +739,20 @@ class DrawingManager {
       }
     ).addTo(map);
 
+    const grbBounds = [
+      [50.685, 2.53],   // southwest (lat, lng)
+      [51.52, 5.92]     // northeast (lat, lng)
+    ];
     const grb = L.tileLayer('https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-      { attribution: '© Vlaanderen GRB', opacity: 1.0, pane: 'overlayPaneTop' }
+      { attribution: '© Vlaanderen GRB', opacity: 1.0, pane: 'overlayPaneTop', bounds: grbBounds, noWrap: true, continuousWorld: false }
     );
 
+    const hillshadeBounds = [
+      [50.64, 2.52], // southwest (lat, lng)
+      [51.51, 5.94]  // northeast (lat, lng)
+    ];
     const hillshade = L.tileLayer('https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-      { attribution: '© Vlaanderen DHMV II', opacity: 1.0, pane: 'overlayPaneTop' }
+      { attribution: '© Vlaanderen DHMV II', opacity: 1.0, pane: 'overlayPaneTop', bounds: hillshadeBounds, noWrap: true, continuousWorld: false }
     );
 
 
