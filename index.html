@@ -17,6 +17,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
   <script src="./js/UserLocationManager.js"></script>
   <style>
 
@@ -59,6 +61,10 @@
         <label><input type="checkbox" id="autoPanToggle" /> Auto-pan location</label>
       </div>
     </div>
+    <div class="section">
+      <h3>📸 Screenshot</h3>
+      <button id="copyScreenshotBtn" class="btn-small btn-save">Screenshot to Clipboard</button>
+    </div>
 
     <div class="section">
       <h3>⭐ Favorites</h3>
@@ -94,6 +100,42 @@
   <div id="map"></div>
 
   <script>
+class ScreenshotManager {
+  constructor(map, buttonId) {
+    this.map = map;
+    this.button = document.getElementById(buttonId);
+    this._attachEvents();
+  }
+
+  _attachEvents() {
+    this.button.addEventListener("click", () => this.copyScreenshot());
+  }
+
+  async copyScreenshot() {
+    try {
+      const mapEl = document.getElementById("map");
+
+      const canvas = await html2canvas(mapEl, {
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: null,
+        logging: false,
+        scale: window.devicePixelRatio
+      });
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob })
+      ]);
+
+      alert("Screenshot copied to clipboard!");
+    } catch (err) {
+      console.error(err);
+      alert("Could not copy screenshot — browser may not support clipboard images.");
+    }
+  }
+}
 
     class BaseLayerController {
       constructor(map, selectId) {
@@ -776,10 +818,49 @@
       }
     );
 ////////////////////////////////
+// const archSiteBounds = [
+//   [50.711333888377226, 2.7897045352532617], // southwest
+//   [51.34043774263329, 5.744063938629052]    // northeast
+// ];
+
+// const archSite = L.tileLayer.wms(
+//   'https://www.mercator.vlaanderen.be/raadpleegdienstenmercatorpubliek/ows',
+//   {
+//     layers: 'ps:ps_bes_arch_site',
+//     format: 'image/png',
+//     transparent: true,
+//     attribution: '© Vlaanderen – Beschermde archeologische sites',
+//     pane: 'overlayPaneTop',
+//     bounds: archSiteBounds,
+//     noWrap: true,
+//     continuousWorld: false,
+//     version: '1.3.0',
+//     crs: L.CRS.EPSG3857,   // ← REQUIRED
+//     uppercase: true        // ← REQUIRED
+//   }
+// ).addTo(map);
 
 //////////////////////////
 
+const ferrarisWBounds = [
+  [49.451080, 2.560669],   // southwest
+  [50.956140, 6.498683]    // northeast
+];
 
+const ferrarisW = L.tileLayer.wms(
+  'https://geoservices.wallonie.be/arcgis/services/CARTES_ANCIENNES/FERRARIS/MapServer/WMSServer',
+  {
+    layers: '0',
+    format: 'image/png',
+    transparent: true,
+    attribution: '© SPW – Carte de Ferraris (1777)',
+    pane: 'overlayPaneTop',
+    version: '1.3.0',
+    bounds: ferrarisWBounds,
+    noWrap: true,
+    continuousWorld: false
+  }
+).addTo(map);
 
 
     map.zoomControl.setPosition('bottomright');
@@ -804,15 +885,30 @@
 
     // Overlay toggles
 
-    document.getElementById('ferrarisToggle').addEventListener('change', e => e.target.checked ? ferraris.addTo(map) : map.removeLayer(ferraris));
+    document.getElementById('ferrarisToggle').addEventListener('change', e => {
+      if (e.target.checked) {
+        ferraris.addTo(map);
+        ferrarisW.addTo(map);
+      } else {
+        map.removeLayer(ferraris);
+        map.removeLayer(ferrarisW);
+      }
+    });
     document.getElementById('grbToggle').addEventListener('change', e => e.target.checked ? grb.addTo(map) : map.removeLayer(grb));
     document.getElementById('hillshadeToggle').addEventListener('change', e => e.target.checked ? hillshade.addTo(map) : map.removeLayer(hillshade));
     document.getElementById('dhmvToggle').addEventListener('change', e => e.target.checked ? dhmv.addTo(map) : map.removeLayer(dhmv));
 
-    document.getElementById('opacitySliderFerraris').addEventListener('input', e => ferraris.setOpacity(e.target.value));
+    document.getElementById('opacitySliderFerraris').addEventListener('input', e => {
+      const value = e.target.value;
+      ferraris.setOpacity(value);
+      ferrarisW.setOpacity(value);
+    });
     document.getElementById('opacitySliderGRB').addEventListener('input', e => grb.setOpacity(e.target.value));
     document.getElementById('opacitySliderHillshade').addEventListener('input', e => hillshade.setOpacity(e.target.value));
     document.getElementById('opacitySliderDhmv').addEventListener('input', e => dhmv.setOpacity(e.target.value));
+
+    //screenshot manager
+    new ScreenshotManager(map, "copyScreenshotBtn");
 
     // Auto-pan logic
     let userMarker = null, autoPan = false;
