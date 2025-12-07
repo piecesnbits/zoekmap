@@ -10,6 +10,8 @@
   <link rel="manifest" href="./manifest.json?v=5" />
   <title>Zoekmap</title>
   <link rel="stylesheet" href="./css/style.css" />
+  
+  <!-- Libraries -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@1.13.0/dist/Control.Geocoder.css" />
@@ -19,9 +21,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  <script src="./js/UserLocationManager.js"></script>
+  <!-- External scripts if needed (UserLocationManager logic is now included below for encapsulation) -->
+  <!-- <script src="./js/UserLocationManager.js"></script> -->
+  
   <style>
-
+    /* Add any inline styles here if necessary */
   </style>
 </head>
 
@@ -34,33 +38,41 @@
 
     <div class="section">
       <h3>🌍 Base Layers</h3>
-
-      <select id="base-layer-select" class="layer-select">
-      </select>
+      <select id="base-layer-select" class="layer-select"></select>
     </div>
 
     <div class="section">
       <h3>🗺️ Overlays</h3>
+      
+      <!-- Ferraris (Composite Layer) -->
       <div class="layer-item">
         <label><input type="checkbox" id="ferrarisToggle" checked /> Ferraris</label>
         <input id="opacitySliderFerraris" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
+
+      <!-- GRB -->
       <div class="layer-item">
         <label><input type="checkbox" id="grbToggle" /> GRB</label>
         <input id="opacitySliderGRB" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
+
+      <!-- Hillshade -->
       <div class="layer-item">
         <label><input type="checkbox" id="hillshadeToggle" /> Hillshade</label>
         <input id="opacitySliderHillshade" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
+
+      <!-- DHMV -->
       <div class="layer-item">
         <label><input type="checkbox" id="dhmvToggle" /> dhmv</label>
         <input id="opacitySliderDhmv" class="slider" type="range" min="0" max="1" step="0.1" value="1.0" />
       </div>
+
       <div class="layer-item">
         <label><input type="checkbox" id="autoPanToggle" /> Auto-pan location</label>
       </div>
     </div>
+
     <div class="section">
       <h3>📸 Screenshot</h3>
       <button id="copyScreenshotBtn" class="btn-small btn-save">Screenshot to Clipboard</button>
@@ -84,27 +96,24 @@
             <button id="cancelEditBtn" class="btn-small">Cancel</button>
           </div>
         </div>
-        <div class="notice">You're editing shapes for this favorite. Switching favorites will ask to discard changes.
-        </div>
+        <div class="notice">You're editing shapes for this favorite. Switching favorites will ask to discard changes.</div>
       </div>
 
       <ul id="favoritesList" class="favorites" aria-live="polite"></ul>
     </div>
-
-    <div class="drawer-footer">
-
-    </div>
-  </div> <!-- closes .drawer -->
-
+  </div>
 
   <div id="map"></div>
 
-  <script>
+<script>
+/**
+ * 1. Screenshot Manager
+ */
 class ScreenshotManager {
   constructor(map, buttonId) {
     this.map = map;
     this.button = document.getElementById(buttonId);
-    this._attachEvents();
+    if(this.button) this._attachEvents();
   }
 
   _attachEvents() {
@@ -114,7 +123,6 @@ class ScreenshotManager {
   async copyScreenshot() {
     try {
       const mapEl = document.getElementById("map");
-
       const canvas = await html2canvas(mapEl, {
         useCORS: true,
         allowTaint: false,
@@ -122,13 +130,8 @@ class ScreenshotManager {
         logging: false,
         scale: window.devicePixelRatio
       });
-
       const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-
-      await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": blob })
-      ]);
-
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       alert("Screenshot copied to clipboard!");
     } catch (err) {
       console.error(err);
@@ -137,830 +140,712 @@ class ScreenshotManager {
   }
 }
 
-    class BaseLayerController {
-      constructor(map, selectId) {
-        this.map = map;
-        this.baseLayers = {};
-        this.activeBase = null;
+/**
+ * 2. Base Layer Controller
+ */
+class BaseLayerController {
+  constructor(map, selectId) {
+    this.map = map;
+    this.baseLayers = {};
+    this.activeBase = null;
+    this.originalSelect = document.getElementById(selectId);
+    
+    // UI Construction
+    this.originalSelect.style.display = "none";
+    this.dropdown = document.createElement("div");
+    this.dropdown.className = "blc-dropdown";
+    this.selected = document.createElement("div");
+    this.selected.className = "blc-selected";
+    this.selected.textContent = "Select base layer";
+    this.dropdown.appendChild(this.selected);
+    this.optionsContainer = document.createElement("div");
+    this.optionsContainer.className = "blc-options";
+    this.dropdown.appendChild(this.optionsContainer);
+    this.originalSelect.parentNode.insertBefore(this.dropdown, this.originalSelect);
 
-        this.originalSelect = document.getElementById(selectId);
-        this.originalSelect.style.display = "none";
+    // Events
+    this.selected.addEventListener("click", () => this.optionsContainer.classList.toggle("blc-show"));
+    document.addEventListener("click", (e) => {
+      if (!this.dropdown.contains(e.target)) this.optionsContainer.classList.remove("blc-show");
+    });
+  }
 
-        // Create custom dropdown
-        this.dropdown = document.createElement("div");
-        this.dropdown.className = "blc-dropdown";
+  addBase(key, config) {
+    this.baseLayers[key] = config.tileLayer;
+    
+    // Original Select
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = config.label;
+    this.originalSelect.appendChild(option);
 
-        this.selected = document.createElement("div");
-        this.selected.className = "blc-selected";
-        this.selected.textContent = "Select base layer";
-        this.dropdown.appendChild(this.selected);
-
-        this.optionsContainer = document.createElement("div");
-        this.optionsContainer.className = "blc-options";
-        this.dropdown.appendChild(this.optionsContainer);
-
-        this.originalSelect.parentNode.insertBefore(this.dropdown, this.originalSelect);
-
-        // Toggle dropdown visibility
-        this.selected.addEventListener("click", () => {
-          this.optionsContainer.classList.toggle("blc-show");
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener("click", (e) => {
-          if (!this.dropdown.contains(e.target)) {
-            this.optionsContainer.classList.remove("blc-show");
-          }
-        });
-      }
-
-      addBase(key, config) {
-        this.baseLayers[key] = config.tileLayer;
-
-        // Original select option
-        const option = document.createElement("option");
-        option.value = key;
-        option.textContent = config.label;
-        this.originalSelect.appendChild(option);
-
-        // Custom option
-        const customOption = document.createElement("div");
-        customOption.className = "blc-option";
-        customOption.dataset.key = key;
-
-        if (config.icon) {
-          const img = document.createElement("img");
-          img.src = config.icon;
-          img.alt = "";
-          img.className = "blc-option-icon";
-          customOption.appendChild(img);
-        }
-
-        const label = document.createElement("span");
-        label.textContent = config.label;
-        customOption.appendChild(label);
-
-        // Click behavior
-        customOption.addEventListener("click", () => {
-          this.setBase(key);
-
-          // Update selected box
-          this.selected.innerHTML = "";
-          if (config.icon) {
-            const imgClone = customOption.querySelector("img").cloneNode();
-            imgClone.className = "blc-selected-icon";
-            this.selected.appendChild(imgClone);
-          }
-          const text = document.createElement("span");
-          text.textContent = config.label;
-          this.selected.appendChild(text);
-
-          // Hide options
-          this.optionsContainer.classList.remove("blc-show");
-
-          // Update original select
-          this.originalSelect.value = key;
-        });
-
-        this.optionsContainer.appendChild(customOption);
-
-        // Automatically select first layer
-        if (!this.activeBase) {
-          customOption.click();
-        }
-      }
-
-      setBase(key) {
-        const layer = this.baseLayers[key];
-        if (!layer) return;
-
-        if (this.activeBase) {
-          this.map.removeLayer(this.activeBase);
-        }
-
-        layer.addTo(this.map);
-        this.activeBase = layer;
-      }
+    // Custom UI
+    const customOption = document.createElement("div");
+    customOption.className = "blc-option";
+    customOption.dataset.key = key;
+    if (config.icon) {
+      const img = document.createElement("img");
+      img.src = config.icon;
+      img.className = "blc-option-icon";
+      customOption.appendChild(img);
     }
+    const label = document.createElement("span");
+    label.textContent = config.label;
+    customOption.appendChild(label);
 
-
-
-    class UserLocationMarker {
-      constructor(map) {
-        this.map = map;
-        this.marker = null;
-        this.lastPosition = null;
-
-        this._createPane();
+    customOption.addEventListener("click", () => {
+      this.setBase(key);
+      this.selected.innerHTML = "";
+      if (config.icon) {
+        const imgClone = customOption.querySelector("img").cloneNode();
+        imgClone.className = "blc-selected-icon";
+        this.selected.appendChild(imgClone);
       }
+      const text = document.createElement("span");
+      text.textContent = config.label;
+      this.selected.appendChild(text);
+      this.optionsContainer.classList.remove("blc-show");
+      this.originalSelect.value = key;
+    });
 
-      _createPane() {
-        if (!this.map.getPane('userLocationPane')) {
-          this.map.createPane('userLocationPane');
-          const pane = this.map.getPane('userLocationPane');
-          pane.style.zIndex = 800;
-          pane.style.pointerEvents = 'none';
-        }
-      }
+    this.optionsContainer.appendChild(customOption);
+    if (!this.activeBase) customOption.click();
+  }
 
-      updatePosition(lat, lng) {
-        const latlng = [lat, lng];
-        this.lastPosition = latlng;
+  setBase(key) {
+    const layer = this.baseLayers[key];
+    if (!layer) return;
+    if (this.activeBase) this.map.removeLayer(this.activeBase);
+    layer.addTo(this.map);
+    this.activeBase = layer;
+  }
+}
 
-        if (!this.marker) {
-          this.marker = L.marker(latlng, {
-            pane: 'userLocationPane',
-            icon: L.divIcon({
-              className: 'user-pulse-marker',
-              iconSize: [20, 20],
-              iconAnchor: [10, 10]
-            })
-          }).addTo(this.map);
-        } else {
-          this.marker.setLatLng(latlng);
-        }
-      }
-
+/**
+ * 3. Overlay Manager (Encapsulation logic)
+ * Handles registering overlays, their checkboxes, sliders, and panes.
+ */
+class OverlayManager {
+  constructor(map, paneName = 'overlayPaneTop', zIndex = 200) {
+    this.map = map;
+    this.paneName = paneName;
+    
+    // Ensure pane exists
+    if (!this.map.getPane(this.paneName)) {
+      this.map.createPane(this.paneName);
+      this.map.getPane(this.paneName).style.zIndex = zIndex;
     }
-
-
-    class ShareManager {
-      static compress(obj) {
-        return LZString.compressToEncodedURIComponent(JSON.stringify(obj));
-      }
-
-      static decompress(str) {
-        try {
-          return JSON.parse(LZString.decompressFromEncodedURIComponent(str));
-        } catch {
-          return null;
-        }
-      }
-
-      static generateShareURL(favObj) {
-        const payload = this.compress(favObj);
-        const url = new URL(window.location.href);
-        url.searchParams.set('favdata', payload);
-        return url.toString();
-      }
-
-      static loadSharedFavorite() {
-        const params = new URLSearchParams(window.location.search);
-        const data = params.get('favdata');
-        if (!data) return null;
-        return this.decompress(data);
-      }
-    }
-
-    // ====== DrawingManager ======
-    class DrawingManager {
-      constructor(map) {
-        this.map = map;
-
-        // Create a dedicated pane for drawings
-        this.paneName = "custom-drawing-pane";
-        this._ensurePane();
-
-        // FeatureGroup with the correct pane
-        this.drawnItems = new L.FeatureGroup(null, {
-          pane: this.paneName
-        });
-        this.map.addLayer(this.drawnItems);
-
-        // Draw controls
-        this.drawControl = new L.Control.Draw({
-          position: 'topright',
-          draw: {
-            polygon: true,
-            polyline: false,
-            rectangle: false,
-            circle: false,
-            marker: true
-          },
-          edit: false
-        });
-
-        this.editControl = null;
-
-        // Handle new drawings
-        this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
-      }
-
-      _ensurePane() {
-        if (!this.map.getPane(this.paneName)) {
-          const pane = this.map.createPane(this.paneName);
-          pane.style.zIndex = 700;  // Above overlays
-          pane.style.pointerEvents = "auto";
-        }
-      }
-
-      onCreated(event) {
-        const layer = event.layer;
-        layer.options.pane = this.paneName; // Force layer into drawing pane
-        this.drawnItems.addLayer(layer);
-      }
-
-      clear() {
-        this.drawnItems.clearLayers();
-      }
-
-      loadGeoJSON(geojson) {
-        this.clear();
-        if (!geojson || !geojson.features?.length) return;
-
-        L.geoJSON(geojson, {
-          pane: this.paneName,
-          pointToLayer: (feature, latlng) =>
-            L.marker(latlng, { pane: this.paneName })
-        }).eachLayer(layer => this.drawnItems.addLayer(layer));
-      }
-
-      toGeoJSON() {
-        return this.drawnItems.toGeoJSON();
-      }
-
-      enableEditMode() {
-        if (this.editControl) return;
-
-        if (this.drawControl) this.map.removeControl(this.drawControl);
-
-        this.editControl = new L.Control.Draw({
-          position: 'topright',
-          draw: {
-            polygon: true,
-            polyline: false,
-            rectangle: false,
-            circle: false,
-            marker: true
-          },
-          edit: {
-            featureGroup: this.drawnItems,
-            remove: true
-          }
-        });
-
-        this.map.addControl(this.editControl);
-      }
-
-      disableEditMode() {
-        if (this.editControl) {
-          this.map.removeControl(this.editControl);
-          this.editControl = null;
-        }
-
-        if (!this.drawControl) {
-          this.drawControl = new L.Control.Draw({
-            position: 'topright',
-            draw: {
-              polygon: true,
-              polyline: false,
-              rectangle: false,
-              circle: false,
-              marker: true
-            },
-            edit: false
-          });
-        }
-
-        this.map.addControl(this.drawControl);
-      }
-    }
-
-
-    // ====== FavoriteManager ======
-    class FavoriteManager {
-      constructor(map, drawingManager, listElement) {
-        this.map = map;
-        this.drawingManager = drawingManager;
-        this.listElement = listElement;
-        this.storageKey = 'favorites';
-        this.data = [];
-        this.activeIndex = null;
-        this.editIndex = null;
-        this.load();
-      }
-
-      load() {
-        try { this.data = JSON.parse(localStorage.getItem(this.storageKey) || '[]'); }
-        catch { this.data = []; }
-        this._renderList();
-      }
-
-      saveStorage() {
-        localStorage.setItem(this.storageKey, JSON.stringify(this.data));
-      }
-
-      addFavorite(name) {
-        const center = this.map.getCenter();
-        const zoom = this.map.getZoom();
-        const shapes = this.drawingManager.toGeoJSON();
-        this.data.push({ name, center, zoom, shapes });
-        this.saveStorage();
-        this._renderList();
-        this.drawingManager.clear();
-      }
-
-      deleteFavorite(index) {
-        if (this.editIndex === index) this.cancelEdit();
-        this.data.splice(index, 1);
-        this.saveStorage();
-        this._renderList();
-        this.drawingManager.clear();
-        if (this.activeIndex === index) this.activeIndex = null;
-        if (this.editIndex === index) this.editIndex = null;
-      }
-
-      openFavorite(index, options = { confirmDiscard: true }) {
-        if (this.editIndex !== null && this.editIndex !== index && options.confirmDiscard) {
-          if (!confirm('You have unsaved edits. Discard changes?')) return false;
-          this.cancelEdit();
-        }
-        const fav = this.data[index];
-        if (!fav) return false;
-        this.map.setView(fav.center, fav.zoom);
-        this.activeIndex = index;
-        this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
-        this.drawingManager.disableEditMode();
-        return true;
-      }
-
-      enterEditMode(index) {
-        const fav = this.data[index];
-        if (!fav) return false;
-        this.map.setView(fav.center, fav.zoom);
-        if (this.editIndex !== null && this.editIndex !== index) {
-          if (!confirm('You have unsaved edits. Discard changes?')) return false;
-          this.cancelEdit();
-        }
-        this.editIndex = index;
-        this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
-        this.drawingManager.enableEditMode();
-        return true;
-      }
-
-      saveEditedShapes() {
-        if (this.editIndex === null) return false;
-        const shapes = this.drawingManager.toGeoJSON();
-        this.data[this.editIndex].shapes = shapes;
-        this.saveStorage();
-        this._renderList();
-        this.cancelEdit();
-        return true;
-      }
-
-      cancelEdit() {
-        if (this.editIndex === null) return;
-        const fav = this.data[this.editIndex];
-        if (fav && fav.shapes) this.drawingManager.loadGeoJSON(fav.shapes);
-        else this.drawingManager.clear();
-        this.editIndex = null;
-        this.drawingManager.disableEditMode();
-        this.drawingManager.clear();
-      }
-
-      _renderList() {
-        this.listElement.innerHTML = '';
-        this.data.forEach((fav, i) => {
-          const li = document.createElement('li');
-          li.className = 'fav-row';
-
-          const left = document.createElement('div');
-          left.className = 'fav-left';
-          const nameSpan = document.createElement('span');
-          nameSpan.className = 'fav-name';
-          nameSpan.textContent = fav.name;
-          nameSpan.title = 'Open favorite (view only)';
-          nameSpan.addEventListener('click', () => this.openFavorite(i, { confirmDiscard: true }));
-          left.appendChild(nameSpan);
-
-          const right = document.createElement('div');
-          right.className = 'fav-actions';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn-small';
-          editBtn.innerHTML = '<span class="material-icons">edit</span>';                // pencil icon
-          editBtn.title = 'Edit shapes in this favorite';
-
-          editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            UIManager.showEditBanner(this.data[i].name);
-            this.enterEditMode(i);
-          });
-
-          const deleteBtn = document.createElement('button');
-          deleteBtn.className = 'btn-small btn-delete';
-          deleteBtn.innerHTML = '<span class="material-icons">close</span>';
-          deleteBtn.title = 'Delete favorite';
-          deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (confirm(`Delete favorite "${fav.name}"?`)) this.deleteFavorite(i);
-          });
-
-          const shareBtn = document.createElement('button');
-          shareBtn.className = 'btn-small';
-          shareBtn.innerHTML = '<span class="material-icons">share</span>';     // clean, universal share glyph
-          shareBtn.title = 'Share this favorite';
-
-          shareBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-
-            const favObj = this.data[i];
-            const url = ShareManager.generateShareURL(favObj);
-
-            if (navigator.share) {
-              navigator.share({
-                title: favObj.name,
-                text: 'Shared via Zoekmap',
-                url
-              });
-            } else {
-              navigator.clipboard.writeText(url);
-              alert('Share link copied to clipboard');
-            }
-          });
-
-          right.appendChild(shareBtn);
-          right.appendChild(editBtn);
-          right.appendChild(deleteBtn);
-          li.appendChild(left);
-          li.appendChild(right);
-          this.listElement.appendChild(li);
-        });
-      }
-
-      exportJSON() { return JSON.stringify(this.data, null, 2); }
-    }
-
-    // ====== UIManager ======
-    const UIManager = (function () {
-      let favManager = null;
-      let drawingManager = null;
-
-      const cache = {
-        drawer: document.getElementById('drawer'),
-        menuBtn: document.getElementById('menuBtn'),
-        closeDrawerBtn: document.getElementById('closeDrawerBtn'),
-        newViewBtn: document.getElementById('newViewBtn'),
-        saveNewViewBtn: document.getElementById('saveNewViewBtn'),
-        cancelNewViewBtn: document.getElementById('cancelNewViewBtn'),
-        saveCancelWrapper: document.getElementById('saveCancelWrapper'),
-        favoritesList: document.getElementById('favoritesList'),
-        editBanner: document.getElementById('editBanner'),
-        editingFavName: document.getElementById('editingFavName'),
-        saveChangesBtn: document.getElementById('saveChangesBtn'),
-        cancelEditBtn: document.getElementById('cancelEditBtn')
-      };
-
-      function init(managers) {
-        favManager = managers.favManager;
-        drawingManager = managers.drawingManager;
-
-        // drawer open/close
-        cache.menuBtn.addEventListener('click', () => { cache.drawer.classList.add('open'); cache.menuBtn.classList.add('hidden'); });
-        cache.closeDrawerBtn.addEventListener('click', () => { cache.drawer.classList.remove('open'); cache.menuBtn.classList.remove('hidden'); });
-
-        // Create New View
-        cache.newViewBtn.addEventListener('click', () => {
-          drawingManager.clear();
-          drawingManager.enableEditMode();
-          cache.newViewBtn.style.display = 'none';
-          cache.saveCancelWrapper.style.display = 'flex';
-        });
-
-        // Save New View
-        cache.saveNewViewBtn.addEventListener('click', () => {
-          const name = prompt('Enter a name for this view:');
-          if (!name) return;
-          favManager.addFavorite(name);
-          drawingManager.disableEditMode();
-          drawingManager.clear();
-          cache.saveCancelWrapper.style.display = 'none';
-          cache.newViewBtn.style.display = 'flex';
-        });
-
-        // Cancel New View
-        cache.cancelNewViewBtn.addEventListener('click', () => {
-          drawingManager.clear();
-          drawingManager.disableEditMode();
-          cache.saveCancelWrapper.style.display = 'none';
-          cache.newViewBtn.style.display = 'flex';
-        });
-
-        // Save changes (only while editing)
-        cache.saveChangesBtn.addEventListener('click', () => {
-          favManager.saveEditedShapes();
-          hideEditBanner();
-        });
-
-        cache.cancelEditBtn.addEventListener('click', () => {
-          if (!confirm('Discard edits?')) return;
-          favManager.cancelEdit();
-          hideEditBanner();
-        });
-
-      }
-
-      function showEditBanner(name) {
-        cache.editBanner.style.display = 'block';
-        cache.editingFavName.textContent = 'Editing: ' + name;
-      }
-
-      function hideEditBanner() {
-        cache.editBanner.style.display = 'none';
-        cache.editingFavName.textContent = '';
-      }
-
-      return { init, showEditBanner, hideEditBanner };
-    })();
-
-    // ====== Map initialization ======
-    const map = L.map('map').setView([50.85, 4.35], 9);
-
-    const baseLayerCtrl = new BaseLayerController(map, "base-layer-select");
-
-    // 1 Google Hybrid
-    baseLayerCtrl.addBase("googleHybrid", {
-      label: "Google Hybrid",
-      icon: "https://www.google.com/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-        { subdomains: ["mt0", "mt1", "mt2", "mt3"], attribution: "© Google" }
-      )
-    });
-
-    // 2 Google Satellite
-    baseLayerCtrl.addBase("googleSatellite", {
-      label: "Google Satellite",
-      icon: "https://www.google.com/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        { subdomains: ["mt0", "mt1", "mt2", "mt3"], attribution: "© Google" }
-      )
-    });
-
-
-
-    // 3 Google Terrain
-    baseLayerCtrl.addBase("googleTerrain", {
-      label: "Google Terrain",
-      icon: "https://www.google.com/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
-        { subdomains: ["mt0", "mt1", "mt2", "mt3"], attribution: "© Google" }
-      )
-    });
-
-    // 4 OpenStreetMap
-    baseLayerCtrl.addBase("osm", {
-      label: "OpenStreetMap",
-      icon: "https://www.openstreetmap.org/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        { attribution: "© OSM contributors" }
-      )
-    });
-
-    // 5 OpenTopoMap
-    // baseLayerCtrl.addBase("opentopo", {
-    //   label: "OpenTopoMap",
-    //   icon: "https://opentopomap.org/favicon.ico",
-    //   tileLayer: L.tileLayer(
-    //     "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    //     { attribution: "© OpenTopoMap CC-BY-SA" }
-    //   )
-    // });
-
-    // 6 Carto Light
-    baseLayerCtrl.addBase("cartoLight", {
-      label: "Carto Light",
-      icon: "https://carto.com/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        { attribution: "© Carto" }
-      )
-    });
-
-    // 7 Carto Dark
-    baseLayerCtrl.addBase("cartoDark", {
-      label: "Carto Dark",
-      icon: "https://carto.com/favicon.ico",
-      tileLayer: L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        { attribution: "© Carto" }
-      )
-    });
-
-    // 8 ESRI World Imagery
-    baseLayerCtrl.addBase("esri", {
-      label: "ESRI World Imagery",
-      icon: "https://www.arcgis.com/sharing/rest/community/users/esri/info/esri_150.jpg",
-      tileLayer: L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { attribution: "Tiles © Esri" }
-      )
-    });
-
-
-    map.createPane('overlayPaneTop');
-    map.getPane('overlayPaneTop').style.zIndex = 200; // above base layers (default: 200-400)
-    // Define the geographic bounds of the Ferraris layer (example)
-    const ferrarisBounds = [
-      [50.685, 2.53],   // southwest corner (lat, lng)
-      [51.520, 5.92]    // northeast corner (lat, lng)
-    ];
-
-    const ferraris = L.tileLayer(
-      'https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
-      {
-        attribution: '© Vlaanderen',
-        opacity: 1.0,
-        pane: 'overlayPaneTop',
-        bounds: ferrarisBounds, // restrict tile requests to layer extent
-        noWrap: true,           // don’t repeat tiles outside world bounds
-        continuousWorld: false  // prevent extra out-of-range requests
-      }
-    ).addTo(map);
-
-    const grbBounds = [
-      [50.685, 2.53],   // southwest (lat, lng)
-      [51.52, 5.92]     // northeast (lat, lng)
-    ];
-    const grb = L.tileLayer('https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-      { attribution: '© Vlaanderen GRB', opacity: 1.0, pane: 'overlayPaneTop', bounds: grbBounds, noWrap: true, continuousWorld: false }
-    );
-
-    const hillshadeBounds = [
-      [50.64, 2.52], // southwest (lat, lng)
-      [51.51, 5.94]  // northeast (lat, lng)
-    ];
-    const hillshade = L.tileLayer('https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
-      { attribution: '© Vlaanderen DHMV II', opacity: 1.0, pane: 'overlayPaneTop', bounds: hillshadeBounds, noWrap: true, continuousWorld: false }
-    );
-
-
-    const dhmvBounds = [
-      [50.64, 2.52],   // southwest (lat, lng)
-      [51.51, 5.94]    // northeast (lat, lng)
-    ];
-
-    const dhmv = L.tileLayer.wms(
-      'https://geo.api.vlaanderen.be/DHMV/wms',
-      {
-        layers: 'DHMVII_DTM_1m',  // kies eventueel 'DHMVII_DSM_1m' of andere
-        format: 'image/png',
-        transparent: true,
-        attribution: '© Vlaanderen',
-        pane: 'overlayPaneTop',
-        bounds: dhmvBounds,
+  }
+
+  /**
+   * Register a new overlay or set of overlays linked to one UI toggle.
+   * @param {string} toggleId - HTML ID of the checkbox
+   * @param {string} sliderId - HTML ID of the range slider
+   * @param {Array|Object} layerConfigs - One or more layer configuration objects
+   * @param {boolean} visibleByDefault - Whether it starts checked
+   */
+  register(toggleId, sliderId, layerConfigs, visibleByDefault = false) {
+    const configs = Array.isArray(layerConfigs) ? layerConfigs : [layerConfigs];
+    const layers = [];
+
+    // Create Leaflet layers from configs
+    configs.forEach(cfg => {
+      let layer;
+      const options = {
+        attribution: cfg.attribution,
+        opacity: 1.0, // Managed by slider
+        pane: this.paneName,
+        bounds: cfg.bounds,
         noWrap: true,
         continuousWorld: false,
-        version: '1.3.0'
+        ...cfg.extraOptions
+      };
+
+      if (cfg.type === 'wms') {
+        layer = L.tileLayer.wms(cfg.url, {
+            ...options,
+            layers: cfg.layers,
+            format: 'image/png',
+            transparent: true,
+            version: cfg.version || '1.1.1'
+        });
+      } else {
+        // Default TileLayer
+        layer = L.tileLayer(cfg.url, options);
       }
-    );
-////////////////////////////////
-// const archSiteBounds = [
-//   [50.711333888377226, 2.7897045352532617], // southwest
-//   [51.34043774263329, 5.744063938629052]    // northeast
-// ];
+      
+      layers.push(layer);
+      
+      if (visibleByDefault) {
+        layer.addTo(this.map);
+      }
+    });
 
-// const archSite = L.tileLayer.wms(
-//   'https://www.mercator.vlaanderen.be/raadpleegdienstenmercatorpubliek/ows',
-//   {
-//     layers: 'ps:ps_bes_arch_site',
-//     format: 'image/png',
-//     transparent: true,
-//     attribution: '© Vlaanderen – Beschermde archeologische sites',
-//     pane: 'overlayPaneTop',
-//     bounds: archSiteBounds,
-//     noWrap: true,
-//     continuousWorld: false,
-//     version: '1.3.0',
-//     crs: L.CRS.EPSG3857,   // ← REQUIRED
-//     uppercase: true        // ← REQUIRED
-//   }
-// ).addTo(map);
+    // Bind UI Events
+    const checkbox = document.getElementById(toggleId);
+    const slider = document.getElementById(sliderId);
 
-//////////////////////////
-
-const ferrarisWBounds = [
-  [49.451080, 2.560669],   // southwest
-  [50.956140, 6.498683]    // northeast
-];
-
-const ferrarisW = L.tileLayer.wms(
-  'https://geoservices.wallonie.be/arcgis/services/CARTES_ANCIENNES/FERRARIS/MapServer/WMSServer',
-  {
-    layers: '0',
-    format: 'image/png',
-    transparent: true,
-    attribution: '© SPW – Carte de Ferraris (1777)',
-    pane: 'overlayPaneTop',
-    version: '1.3.0',
-    bounds: ferrarisWBounds,
-    noWrap: true,
-    continuousWorld: false
-  }
-).addTo(map);
-
-
-    map.zoomControl.setPosition('bottomright');
-
-    const geocoder = L.Control.geocoder({ defaultMarkGeocode: true, placeholder: 'Search location...', errorMessage: 'Not found' })
-      .on('markgeocode', function (e) { map.setView(e.geocode.center, 16); })
-      .addTo(map);
-
-
-
-    const drawingManager = new DrawingManager(map);
-    const favManager = new FavoriteManager(map, drawingManager, document.getElementById('favoritesList'));
-    UIManager.init({ favManager, drawingManager });
-
-    const shared = ShareManager.loadSharedFavorite();
-    if (shared) {
-      drawingManager.loadGeoJSON(shared.shapes);
-      map.setView(shared.center, shared.zoom);
-
-      // optional: show banner: "This is a shared view, save it?"
+    if (checkbox) {
+      checkbox.checked = visibleByDefault;
+      checkbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        layers.forEach(l => {
+          if (isChecked) l.addTo(this.map);
+          else this.map.removeLayer(l);
+        });
+      });
     }
 
-    // Overlay toggles
+    if (slider) {
+      slider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        layers.forEach(l => l.setOpacity(val));
+      });
+    }
 
-    document.getElementById('ferrarisToggle').addEventListener('change', e => {
-      if (e.target.checked) {
-        ferraris.addTo(map);
-        ferrarisW.addTo(map);
-      } else {
-        map.removeLayer(ferraris);
-        map.removeLayer(ferrarisW);
-      }
-    });
-    document.getElementById('grbToggle').addEventListener('change', e => e.target.checked ? grb.addTo(map) : map.removeLayer(grb));
-    document.getElementById('hillshadeToggle').addEventListener('change', e => e.target.checked ? hillshade.addTo(map) : map.removeLayer(hillshade));
-    document.getElementById('dhmvToggle').addEventListener('change', e => e.target.checked ? dhmv.addTo(map) : map.removeLayer(dhmv));
+    return layers;
+  }
+}
 
-    document.getElementById('opacitySliderFerraris').addEventListener('input', e => {
-      const value = e.target.value;
-      ferraris.setOpacity(value);
-      ferrarisW.setOpacity(value);
-    });
-    document.getElementById('opacitySliderGRB').addEventListener('input', e => grb.setOpacity(e.target.value));
-    document.getElementById('opacitySliderHillshade').addEventListener('input', e => hillshade.setOpacity(e.target.value));
-    document.getElementById('opacitySliderDhmv').addEventListener('input', e => dhmv.setOpacity(e.target.value));
+/**
+ * 4. User Location & Geolocation Manager
+ */
+class UserLocationManager {
+  constructor(map, autoPanToggleId) {
+    this.map = map;
+    this.marker = null;
+    this.lastPosition = null;
+    this.autoPan = false;
+    
+    this._createPane();
+    this._setupAutoPan(autoPanToggleId);
+    this._setupLocateControl();
+    this._startWatching();
+  }
 
-    //screenshot manager
-    new ScreenshotManager(map, "copyScreenshotBtn");
+  _createPane() {
+    if (!this.map.getPane('userLocationPane')) {
+      this.map.createPane('userLocationPane');
+      const pane = this.map.getPane('userLocationPane');
+      pane.style.zIndex = 800;
+      pane.style.pointerEvents = 'none';
+    }
+  }
 
-    // Auto-pan logic
-    let userMarker = null, autoPan = false;
-    const autoPanToggle = document.getElementById('autoPanToggle');
-    autoPanToggle.addEventListener('change', e => autoPan = e.target.checked);
+  _setupAutoPan(toggleId) {
+    const toggle = document.getElementById(toggleId);
+    if(toggle) {
+        toggle.addEventListener('change', e => this.autoPan = e.target.checked);
+    }
+  }
 
-    const userMarkerController = new UserLocationMarker(map);
+  _updatePosition(lat, lng) {
+    const latlng = [lat, lng];
+    this.lastPosition = latlng;
+
+    if (!this.marker) {
+      this.marker = L.marker(latlng, {
+        pane: 'userLocationPane',
+        icon: L.divIcon({
+          className: 'user-pulse-marker',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        })
+      }).addTo(this.map);
+    } else {
+      this.marker.setLatLng(latlng);
+    }
+
+    if (this.autoPan) {
+        this.map.setView(latlng);
+    }
+  }
+
+  _startWatching() {
     if (navigator.geolocation) {
       navigator.geolocation.watchPosition(
         pos => {
-          const { latitude, longitude } = pos.coords;
-          userMarkerController.updatePosition(latitude, longitude);
-
-          if (autoPan) map.setView([latitude, longitude]);
+          this._updatePosition(pos.coords.latitude, pos.coords.longitude);
         },
-        err => console.warn(err),
+        err => console.warn("Geolocation access denied or error", err),
         { enableHighAccuracy: true, maximumAge: 1000 }
       );
     }
+  }
 
+  _setupLocateControl() {
     const locateButton = L.control({ position: 'topright' });
-    locateButton.onAdd = map => {
+    locateButton.onAdd = () => {
       const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
       div.innerHTML = `
-    <a href="#" title="Go to my location" style="
-      display: block;
-      line-height: 26px; /* match Leaflet button height */
-      text-align: center;
-      text-decoration: none;
-      color: inherit;
-    ">
-      <span class="material-icons" style="vertical-align: middle; font-size: 20px;">gps_fixed</span>
-    </a>
-  `;
-      div.onclick = () => {
-        if (userMarkerController.lastPosition) {
-          map.setView(userMarkerController.lastPosition, 16);
+        <a href="#" title="Go to my location" style="display:block;line-height:26px;text-align:center;color:inherit;">
+          <span class="material-icons" style="vertical-align:middle;font-size:20px;">gps_fixed</span>
+        </a>`;
+      div.onclick = (e) => {
+        e.preventDefault();
+        if (this.lastPosition) {
+          this.map.setView(this.lastPosition, 16);
         } else {
           alert("Location not available yet");
         }
       };
       return div;
     };
-    locateButton.addTo(map);
+    locateButton.addTo(this.map);
+  }
+}
 
-    // Service Worker registration
+/**
+ * 5. Share Manager (Utility)
+ */
+class ShareManager {
+  static compress(obj) { return LZString.compressToEncodedURIComponent(JSON.stringify(obj)); }
+  static decompress(str) {
+    try { return JSON.parse(LZString.decompressFromEncodedURIComponent(str)); } catch { return null; }
+  }
+  static generateShareURL(favObj) {
+    const payload = this.compress(favObj);
+    const url = new URL(window.location.href);
+    url.searchParams.set('favdata', payload);
+    return url.toString();
+  }
+  static loadSharedFavorite() {
+    const params = new URLSearchParams(window.location.search);
+    const data = params.get('favdata');
+    if (!data) return null;
+    return this.decompress(data);
+  }
+}
+
+/**
+ * 6. Drawing Manager
+ */
+class DrawingManager {
+  constructor(map) {
+    this.map = map;
+    this.paneName = "custom-drawing-pane";
+    this._ensurePane();
+    this.drawnItems = new L.FeatureGroup(null, { pane: this.paneName });
+    this.map.addLayer(this.drawnItems);
+
+    this.drawControl = new L.Control.Draw({
+      position: 'topright',
+      draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
+      edit: false
+    });
+    this.editControl = null;
+    this.map.on(L.Draw.Event.CREATED, (e) => this.onCreated(e));
+  }
+
+  _ensurePane() {
+    if (!this.map.getPane(this.paneName)) {
+      const pane = this.map.createPane(this.paneName);
+      pane.style.zIndex = 700;
+      pane.style.pointerEvents = "auto";
+    }
+  }
+
+  onCreated(event) {
+    const layer = event.layer;
+    layer.options.pane = this.paneName;
+    this.drawnItems.addLayer(layer);
+  }
+
+  clear() { this.drawnItems.clearLayers(); }
+
+  loadGeoJSON(geojson) {
+    this.clear();
+    if (!geojson || !geojson.features?.length) return;
+    L.geoJSON(geojson, {
+      pane: this.paneName,
+      pointToLayer: (feature, latlng) => L.marker(latlng, { pane: this.paneName })
+    }).eachLayer(layer => this.drawnItems.addLayer(layer));
+  }
+
+  toGeoJSON() { return this.drawnItems.toGeoJSON(); }
+
+  enableEditMode() {
+    if (this.editControl) return;
+    if (this.drawControl) this.map.removeControl(this.drawControl);
+    this.editControl = new L.Control.Draw({
+      position: 'topright',
+      draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
+      edit: { featureGroup: this.drawnItems, remove: true }
+    });
+    this.map.addControl(this.editControl);
+  }
+
+  disableEditMode() {
+    if (this.editControl) {
+      this.map.removeControl(this.editControl);
+      this.editControl = null;
+    }
+    if (!this.drawControl) {
+      this.drawControl = new L.Control.Draw({
+        position: 'topright',
+        draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: true },
+        edit: false
+      });
+    }
+    this.map.addControl(this.drawControl);
+  }
+}
+
+/**
+ * 7. Favorite Manager
+ */
+class FavoriteManager {
+  constructor(map, drawingManager, listElement) {
+    this.map = map;
+    this.drawingManager = drawingManager;
+    this.listElement = listElement;
+    this.storageKey = 'favorites';
+    this.data = [];
+    this.activeIndex = null;
+    this.editIndex = null;
+    this.load();
+  }
+
+  load() {
+    try { this.data = JSON.parse(localStorage.getItem(this.storageKey) || '[]'); }
+    catch { this.data = []; }
+    this._renderList();
+  }
+
+  saveStorage() { localStorage.setItem(this.storageKey, JSON.stringify(this.data)); }
+
+  addFavorite(name) {
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    const shapes = this.drawingManager.toGeoJSON();
+    this.data.push({ name, center, zoom, shapes });
+    this.saveStorage();
+    this._renderList();
+    this.drawingManager.clear();
+  }
+
+  deleteFavorite(index) {
+    if (this.editIndex === index) this.cancelEdit();
+    this.data.splice(index, 1);
+    this.saveStorage();
+    this._renderList();
+    this.drawingManager.clear();
+  }
+
+  openFavorite(index, options = { confirmDiscard: true }) {
+    if (this.editIndex !== null && this.editIndex !== index && options.confirmDiscard) {
+      if (!confirm('You have unsaved edits. Discard changes?')) return false;
+      this.cancelEdit();
+    }
+    const fav = this.data[index];
+    if (!fav) return false;
+    this.map.setView(fav.center, fav.zoom);
+    this.activeIndex = index;
+    this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
+    this.drawingManager.disableEditMode();
+    return true;
+  }
+
+  enterEditMode(index) {
+    const fav = this.data[index];
+    if (!fav) return false;
+    this.map.setView(fav.center, fav.zoom);
+    if (this.editIndex !== null && this.editIndex !== index) {
+      if (!confirm('You have unsaved edits. Discard changes?')) return false;
+      this.cancelEdit();
+    }
+    this.editIndex = index;
+    this.drawingManager.loadGeoJSON(fav.shapes || { type: 'FeatureCollection', features: [] });
+    this.drawingManager.enableEditMode();
+    return true;
+  }
+
+  saveEditedShapes() {
+    if (this.editIndex === null) return false;
+    const shapes = this.drawingManager.toGeoJSON();
+    this.data[this.editIndex].shapes = shapes;
+    this.saveStorage();
+    this._renderList();
+    this.cancelEdit();
+    return true;
+  }
+
+  cancelEdit() {
+    if (this.editIndex === null) return;
+    const fav = this.data[this.editIndex];
+    if (fav && fav.shapes) this.drawingManager.loadGeoJSON(fav.shapes);
+    else this.drawingManager.clear();
+    this.editIndex = null;
+    this.drawingManager.disableEditMode();
+    this.drawingManager.clear();
+  }
+
+  _renderList() {
+    this.listElement.innerHTML = '';
+    this.data.forEach((fav, i) => {
+      const li = document.createElement('li');
+      li.className = 'fav-row';
+
+      const left = document.createElement('div');
+      left.className = 'fav-left';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'fav-name';
+      nameSpan.textContent = fav.name;
+      nameSpan.title = 'Open favorite (view only)';
+      nameSpan.addEventListener('click', () => this.openFavorite(i, { confirmDiscard: true }));
+      left.appendChild(nameSpan);
+
+      const right = document.createElement('div');
+      right.className = 'fav-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-small';
+      editBtn.innerHTML = '<span class="material-icons">edit</span>';
+      editBtn.title = 'Edit shapes';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        UIManager.showEditBanner(this.data[i].name);
+        this.enterEditMode(i);
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-small btn-delete';
+      deleteBtn.innerHTML = '<span class="material-icons">close</span>';
+      deleteBtn.title = 'Delete';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete favorite "${fav.name}"?`)) this.deleteFavorite(i);
+      });
+
+      const shareBtn = document.createElement('button');
+      shareBtn.className = 'btn-small';
+      shareBtn.innerHTML = '<span class="material-icons">share</span>';
+      shareBtn.title = 'Share';
+      shareBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const url = ShareManager.generateShareURL(this.data[i]);
+        if (navigator.share) {
+          navigator.share({ title: fav.name, text: 'Shared via Zoekmap', url });
+        } else {
+          navigator.clipboard.writeText(url);
+          alert('Share link copied to clipboard');
+        }
+      });
+
+      right.append(shareBtn, editBtn, deleteBtn);
+      li.append(left, right);
+      this.listElement.appendChild(li);
+    });
+  }
+}
+
+/**
+ * 8. UI Manager (DOM Interactions)
+ */
+const UIManager = (function () {
+  let favManager = null;
+  let drawingManager = null;
+
+  const cache = {
+    drawer: document.getElementById('drawer'),
+    menuBtn: document.getElementById('menuBtn'),
+    closeDrawerBtn: document.getElementById('closeDrawerBtn'),
+    newViewBtn: document.getElementById('newViewBtn'),
+    saveNewViewBtn: document.getElementById('saveNewViewBtn'),
+    cancelNewViewBtn: document.getElementById('cancelNewViewBtn'),
+    saveCancelWrapper: document.getElementById('saveCancelWrapper'),
+    favoritesList: document.getElementById('favoritesList'),
+    editBanner: document.getElementById('editBanner'),
+    editingFavName: document.getElementById('editingFavName'),
+    saveChangesBtn: document.getElementById('saveChangesBtn'),
+    cancelEditBtn: document.getElementById('cancelEditBtn')
+  };
+
+  function init(managers) {
+    favManager = managers.favManager;
+    drawingManager = managers.drawingManager;
+
+    cache.menuBtn.addEventListener('click', () => { cache.drawer.classList.add('open'); cache.menuBtn.classList.add('hidden'); });
+    cache.closeDrawerBtn.addEventListener('click', () => { cache.drawer.classList.remove('open'); cache.menuBtn.classList.remove('hidden'); });
+
+    cache.newViewBtn.addEventListener('click', () => {
+      drawingManager.clear();
+      drawingManager.enableEditMode();
+      cache.newViewBtn.style.display = 'none';
+      cache.saveCancelWrapper.style.display = 'flex';
+    });
+
+    cache.saveNewViewBtn.addEventListener('click', () => {
+      const name = prompt('Enter a name for this view:');
+      if (!name) return;
+      favManager.addFavorite(name);
+      drawingManager.disableEditMode();
+      drawingManager.clear();
+      cache.saveCancelWrapper.style.display = 'none';
+      cache.newViewBtn.style.display = 'flex';
+    });
+
+    cache.cancelNewViewBtn.addEventListener('click', () => {
+      drawingManager.clear();
+      drawingManager.disableEditMode();
+      cache.saveCancelWrapper.style.display = 'none';
+      cache.newViewBtn.style.display = 'flex';
+    });
+
+    cache.saveChangesBtn.addEventListener('click', () => {
+      favManager.saveEditedShapes();
+      hideEditBanner();
+    });
+
+    cache.cancelEditBtn.addEventListener('click', () => {
+      if (!confirm('Discard edits?')) return;
+      favManager.cancelEdit();
+      hideEditBanner();
+    });
+  }
+
+  function showEditBanner(name) {
+    cache.editBanner.style.display = 'block';
+    cache.editingFavName.textContent = 'Editing: ' + name;
+  }
+
+  function hideEditBanner() {
+    cache.editBanner.style.display = 'none';
+    cache.editingFavName.textContent = '';
+  }
+
+  return { init, showEditBanner, hideEditBanner };
+})();
+
+
+/**
+ * 9. Main Application Class
+ * Bootstraps the map and ties all managers together.
+ */
+class ZoekMapApp {
+  constructor(mapId) {
+    this.map = L.map(mapId).setView([50.85, 4.35], 9);
+    this.map.zoomControl.setPosition('bottomright');
+    
+    // Initialize components
+    this.baseLayerCtrl = new BaseLayerController(this.map, "base-layer-select");
+    this.overlayManager = new OverlayManager(this.map);
+    this.drawingManager = new DrawingManager(this.map);
+    this.favManager = new FavoriteManager(this.map, this.drawingManager, document.getElementById('favoritesList'));
+    this.userLocManager = new UserLocationManager(this.map, 'autoPanToggle');
+    this.screenshotManager = new ScreenshotManager(this.map, "copyScreenshotBtn");
+    
+    this.init();
+  }
+
+  init() {
+    this.setupBaseLayers();
+    this.setupOverlays();
+    this.setupGeocoder();
+    
+    // Initialize UI Logic
+    UIManager.init({ 
+      favManager: this.favManager, 
+      drawingManager: this.drawingManager 
+    });
+
+    // Handle Shared Link
+    const shared = ShareManager.loadSharedFavorite();
+    if (shared) {
+      this.drawingManager.loadGeoJSON(shared.shapes);
+      this.map.setView(shared.center, shared.zoom);
+    }
+    
+    // Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('Service Worker registered'))
-        .catch(err => console.error('Service Worker registration failed:', err));
+        .then(() => console.log('SW Registered'))
+        .catch(err => console.error('SW Error:', err));
     }
-  </script>
-</body>
+  }
 
+  setupBaseLayers() {
+    const bases = [
+      { key: "googleHybrid", label: "Google Hybrid", url: "https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", icon: "https://www.google.com/favicon.ico" },
+      { key: "googleSatellite", label: "Google Satellite", url: "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", icon: "https://www.google.com/favicon.ico" },
+      { key: "googleTerrain", label: "Google Terrain", url: "https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", icon: "https://www.google.com/favicon.ico" },
+      { key: "osm", label: "OpenStreetMap", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", icon: "https://www.openstreetmap.org/favicon.ico" },
+      { key: "cartoLight", label: "Carto Light", url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", icon: "https://carto.com/favicon.ico" },
+      { key: "cartoDark", label: "Carto Dark", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", icon: "https://carto.com/favicon.ico" },
+      { key: "esri", label: "ESRI World Imagery", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", icon: "https://www.arcgis.com/sharing/rest/community/users/esri/info/esri_150.jpg" }
+    ];
+
+    bases.forEach(b => {
+      this.baseLayerCtrl.addBase(b.key, {
+        label: b.label,
+        icon: b.icon,
+        tileLayer: L.tileLayer(b.url, { subdomains: ["mt0", "mt1", "mt2", "mt3"], attribution: b.label })
+      });
+    });
+  }
+
+  setupOverlays() {
+    // 1. Ferraris (Combined Flemish + Walloon)
+    this.overlayManager.register('ferrarisToggle', 'opacitySliderFerraris', [
+      {
+        type: 'tile',
+        url: 'https://geo.api.vlaanderen.be/HISTCART/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=ferraris&style=&tilematrixset=GoogleMapsVL&format=image/png&tilematrix={z}&tilerow={y}&tilecol={x}',
+        bounds: [[50.685, 2.53], [51.520, 5.92]],
+        attribution: '© Vlaanderen'
+      },
+      {
+        type: 'wms',
+        url: 'https://geoservices.wallonie.be/arcgis/services/CARTES_ANCIENNES/FERRARIS/MapServer/WMSServer',
+        layers: '0',
+        bounds: [[49.451080, 2.560669], [50.956140, 6.498683]],
+        attribution: '© SPW – Ferraris',
+        version: '1.3.0'
+      }
+    ], true); // Checked by default
+
+    // 2. GRB
+    this.overlayManager.register('grbToggle', 'opacitySliderGRB', {
+      type: 'tile',
+      url: 'https://geo.api.vlaanderen.be/GRB/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=grb_bsk&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+      bounds: [[50.685, 2.53], [51.52, 5.92]],
+      attribution: '© Vlaanderen GRB'
+    });
+
+    // 3. Hillshade
+    this.overlayManager.register('hillshadeToggle', 'opacitySliderHillshade', {
+      type: 'tile',
+      url: 'https://geo.api.vlaanderen.be/DHMV/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=DHMV_II_HILL_25cm&STYLE=&TILEMATRIXSET=GoogleMapsVL&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+      bounds: [[50.64, 2.52], [51.51, 5.94]],
+      attribution: '© Vlaanderen DHMV II'
+    });
+
+    // 4. DHMV (WMS)
+    this.overlayManager.register('dhmvToggle', 'opacitySliderDhmv', {
+      type: 'wms',
+      url: 'https://geo.api.vlaanderen.be/DHMV/wms',
+      layers: 'DHMVII_DTM_1m',
+      bounds: [[50.64, 2.52], [51.51, 5.94]],
+      attribution: '© Vlaanderen',
+      version: '1.3.0'
+    });
+  }
+
+  setupGeocoder() {
+    L.Control.geocoder({ 
+      defaultMarkGeocode: true, 
+      placeholder: 'Search location...', 
+      errorMessage: 'Not found' 
+    })
+    .on('markgeocode', (e) => this.map.setView(e.geocode.center, 16))
+    .addTo(this.map);
+  }
+}
+
+// Start the App
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new ZoekMapApp('map');
+});
+
+</script>
+</body>
 </html>
